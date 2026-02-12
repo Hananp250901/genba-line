@@ -230,18 +230,23 @@ function updateMenu(role) {
 // 7. LOAD DATA (JAM NETRAL)
 // ==========================================
 async function initChiefMode() { loadChiefLogs(); }
-async function initDeptHeadMode() { 
-    // Set input tanggal ke hari ini (YYYY-MM-DD)
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }); // Format: 2026-02-12
+async function initDeptHeadMode() {
+    // 1. Set default tanggal di input filter (WIB)
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
     const dateInput = document.getElementById('filter-date');
-    if(dateInput) {
-        dateInput.value = today;
-        // Langsung panggil fungsi cari biar tabel keisi otomatis
-        cariHistory(); 
-    }
-    
-    renderDashboard(); 
-    dashboardInterval = setInterval(renderDashboard, 10000); 
+    if(dateInput) dateInput.value = today;
+
+    // 2. Jalankan render pertama kali
+    renderDashboard();
+
+    // 3. PASANG REALTIME: Gak perlu refresh lagi!
+    // Tiap ada data masuk (INSERT) ke genba_logs, dashboard langsung update otomatis.
+    db.channel('custom-all-channel')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'genba_logs' }, () => {
+          console.log('Ada scan baru masuk! Update dashboard...');
+          renderDashboard(); 
+      })
+      .subscribe();
 }
 async function initAdminMode() { loadAdminQR(); }
 
@@ -276,25 +281,18 @@ async function loadChiefLogs() {
 }
 
 async function renderDashboard() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0]; // Ambil YYYY-MM-DD
     const shiftNow = getShift();
 
-    // 1. Ambil SEMUA log hari ini & shift ini, urutkan dari yang TERBARU (DESC)
-    const { data: allShiftLogs } = await db.from('genba_logs')
+    // 1. Ambil SEMUA log shift ini, URUTKAN DARI TERBARU (descending)
+    const { data: allLogs } = await db.from('genba_logs')
         .select('*')
         .eq('shift', shiftNow) 
         .gte('scan_time', today)
-        .order('scan_time', { ascending: false }); // Penting: Biar jam terbaru di atas
+        .order('scan_time', { ascending: false }); // <--- WAJIB: Biar 21:15 di atas 20:00
 
-    // 2. Tentukan siapa "Chief Aktif" sekarang
-    // Kita ambil nama orang yang PALING BARU melakukan scan di shift ini
-    const activeUser = (allShiftLogs && allShiftLogs.length > 0) ? allShiftLogs[0].user_name : null;
-
-    // Tampilkan nama Chief yang sedang terpantau aktif di dashboard
-    const elShift = document.getElementById('monitor-shift');
-    if (elShift) {
-        elShift.innerHTML = `${shiftNow} <br> <span class="text-[10px] text-slate-500">ACTIVE: ${activeUser || 'NONE'}</span>`;
-    }
+    // 2. Siapa yang terakhir scan di shift ini (Chief Aktif)
+    const activeUser = (allLogs && allLogs.length > 0) ? allLogs[0].user_name : null;
 
     const { data: locs } = await db.from('locations').select('*').order('id');
     const container = document.getElementById('line-status-container');
@@ -303,63 +301,48 @@ async function renderDashboard() {
     
     if(locs) {
         locs.forEach(loc => {
-            // CARI LOG: Filter hanya milik Active User dan lokasi ini
-            // Karena allShiftLogs sudah di-order DESC, maka item pertama pasti yang jamnya TERBARU
-            const log = allShiftLogs ? allShiftLogs.find(l => l.location_id === loc.id && l.user_name === activeUser) : null;
+            // Karena allLogs sudah di-sort TERBARU di atas, .find() otomatis ambil jam yang PALING BARU
+            const log = allLogs ? allLogs.find(l => l.location_id === loc.id && l.user_name === activeUser) : null;
             const isDone = !!log;
             
-            // Render Card (Fix Icon & Layout)
             container.innerHTML += `
-            <div class="bg-white border-l-4 ${isDone ? 'border-green-500' : 'border-red-500'} p-4 rounded-xl shadow-sm relative transition-all duration-300">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="max-w-[70%]">
-                        <h4 class="font-bold text-sm text-slate-800 leading-tight">${loc.name}</h4>
+            <div class="bg-white border-l-4 ${isDone ? 'border-green-500' : 'border-red-500'} p-4 rounded-xl shadow-sm">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h4 class="font-bold text-sm text-slate-800">${loc.name}</h4>
                         <span class="text-[10px] font-bold ${isDone ? 'text-green-600' : 'text-slate-400'} uppercase">
-                            ${isDone ? 'VISITED' : 'PENDING'}
+                            ${isDone ? 'VISITED' : 'BELUM'}
                         </span>
                     </div>
-                    <div class="flex items-center justify-center">
-                        ${isDone ? 
-                            '<i class="fa-solid fa-circle-check text-green-500 text-2xl"></i>' : 
-                            '<i class="fa-solid fa-circle-xmark text-red-100 text-2xl"></i>'}
-                    </div>
+                    <div class="text-2xl">${isDone ? '✅' : '⏰'}</div>
                 </div>
                 
-                <div class="mt-2 pt-2 border-t border-slate-50">
+                <div class="mt-3 pt-2 border-t border-slate-50">
                     ${isDone ? `
-                        <p class="text-[11px] text-slate-600 font-bold">PIC: ${log.user_name}</p>
-                        <p class="text-[10px] text-slate-400">Jam Terbaru: ${formatWaktu(log.scan_time)}</p>
+                        <p class="text-[11px] text-slate-700 font-bold">${log.user_name}</p>
+                        <p class="text-[11px] text-blue-600 font-bold">Jam Terbaru: ${formatWaktu(log.scan_time)}</p>
                     ` : `
-                        <p class="text-[10px] text-red-500 font-bold animate-pulse">BELUM DIKUNJUNGI ${activeUser || ''}</p>
+                        <p class="text-[10px] text-red-500 font-bold">Menunggu Scan...</p>
                     `}
                 </div>
             </div>`;
         });
     }
 
-    // 3. TABEL LOG BAWAH (Show All - Tanpa Limit - Shift di Kolom Sendiri)
-    const { data: recent } = await db.from('genba_logs')
-        .select('*, locations(name)')
-        .gte('scan_time', today)
-        .order('scan_time', { ascending: false }); // Nampilin SEMUA aktivitas hari ini
-    
+    // 3. TABEL RIWAYAT (No Limit & Shift Kolom Sendiri)
     const tbody = document.getElementById('all-logs-table');
     if(tbody) {
         tbody.innerHTML = '';
-        if (recent && recent.length > 0) {
-            recent.forEach(r => { 
-                tbody.innerHTML += `
-                <tr class="border-b border-slate-50 hover:bg-slate-50 transition">
-                    <td class="p-3 text-slate-500 text-xs font-mono">${formatWaktu(r.scan_time)}</td>
-                    <td class="p-3 font-bold text-slate-700 text-xs">${r.user_name}</td>
-                    <td class="p-3 text-slate-600 text-xs">${r.locations ? r.locations.name : '-'}</td>
-                    <td class="p-3"> <span class="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded">
-                            ${r.shift}
-                        </span>
-                    </td>
-                </tr>`; 
-            });
-        }
+        if (allLogs) allLogs.forEach(r => { 
+            tbody.innerHTML += `
+            <tr class="border-b border-slate-50 hover:bg-slate-50">
+                <td class="p-3 font-bold text-slate-700 text-xs">${formatWaktu(r.scan_time)}</td>
+                <td class="p-3 font-bold text-slate-800 text-xs">${r.user_name}</td>
+                <td class="p-3 text-slate-600 text-xs">Lokasi: ${r.location_id}</td>
+                <td class="p-3"> <span class="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded">${r.shift}</span>
+                </td>
+            </tr>`; 
+        });
     }
 }
 async function loadAdminQR() {
