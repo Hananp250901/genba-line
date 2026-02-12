@@ -2,16 +2,24 @@
 // 1. KONEKSI SERVER (SUPABASE)
 // ==========================================
 // Saya sudah masukkan key punya lu di sini.
-const SUPABASE_URL = 'https://fbfvhcwisvlyodwvmpqg.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZiZnZoY3dpc3ZseW9kd3ZtcHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MTQ2MzQsImV4cCI6MjA3MjM5MDYzNH0.mbn9B1xEr_8kmC2LOP5Jv5O7AEIK7Fa1gxrqJ91WNx4';
+const PROJECT_URL = 'https://fbfvhcwisvlyodwvmpqg.supabase.co';
+const PROJECT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZiZnZoY3dpc3ZseW9kd3ZtcHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MTQ2MzQsImV4cCI6MjA3MjM5MDYzNH0.mbn9B1xEr_8kmC2LOP5Jv5O7AEIK7Fa1gxrqJ91WNx4';
 
-// Inisialisasi
-let supabase;
+// KITA GANTI NAMA VARIABEL JADI 'db' SUPAYA TIDAK BENTROK
+let db; 
+
 try {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    console.log("Supabase Connected");
-    document.getElementById('login-status').innerText = "Server Connected ✅";
-    document.getElementById('login-status').classList.add('text-green-500');
+    // window.supabase adalah bawaan library
+    // db adalah koneksi kita
+    db = window.supabase.createClient(PROJECT_URL, PROJECT_KEY);
+    
+    console.log("Database Connected");
+    // Cek elemen ada atau tidak sebelum ubah text (biar ga error null)
+    const statusEl = document.getElementById('login-status');
+    if(statusEl) {
+        statusEl.innerText = "Server Connected ✅";
+        statusEl.classList.add('text-green-500');
+    }
 } catch (e) {
     console.error("Error init supabase:", e);
     alert("Gagal konek Supabase. Cek internet.");
@@ -34,11 +42,15 @@ document.addEventListener('DOMContentLoaded', () => {
     updateClock();
 
     // Listener Tombol Login
-    document.getElementById('form-login').addEventListener('submit', handleLogin);
+    const loginForm = document.getElementById('form-login');
+    if(loginForm) loginForm.addEventListener('submit', handleLogin);
 
     // Listener Logout
-    document.getElementById('btn-logout-sidebar').addEventListener('click', logout);
-    document.getElementById('btn-logout-mobile').addEventListener('click', logout);
+    const btnLogoutSide = document.getElementById('btn-logout-sidebar');
+    if(btnLogoutSide) btnLogoutSide.addEventListener('click', logout);
+    
+    const btnLogoutMob = document.getElementById('btn-logout-mobile');
+    if(btnLogoutMob) btnLogoutMob.addEventListener('click', logout);
 });
 
 // ==========================================
@@ -48,11 +60,14 @@ function showSection(sectionId) {
     // Sembunyikan semua section
     document.querySelectorAll('main section').forEach(el => el.classList.add('hidden-section'));
     // Tampilkan yang dipilih
-    document.getElementById(sectionId).classList.remove('hidden-section');
+    const target = document.getElementById(sectionId);
+    if(target) target.classList.remove('hidden-section');
 }
 
 function updateMenu(role) {
     const nav = document.getElementById('nav-container');
+    if(!nav) return;
+    
     nav.innerHTML = ''; // Reset
 
     let menuItems = [];
@@ -94,7 +109,8 @@ async function handleLogin(e) {
     btn.disabled = true;
 
     try {
-        const { data, error } = await supabase
+        // GANTI 'supabase' JADI 'db' DISINI
+        const { data, error } = await db
             .from('users')
             .select('*')
             .eq('username', username)
@@ -175,8 +191,8 @@ function updateClock() {
 // 7. MODE CHIEF (SCANNER)
 // ==========================================
 async function initChiefMode() {
-    // Ambil data lokasi dulu buat validasi
-    const { data } = await supabase.from('locations').select('*');
+    // GANTI 'supabase' JADI 'db'
+    const { data } = await db.from('locations').select('*');
     if (data) locations = data;
     
     loadChiefLogs();
@@ -184,6 +200,9 @@ async function initChiefMode() {
 }
 
 function startScanner() {
+    // Pastikan elemen reader ada
+    if(!document.getElementById('reader')) return;
+
     html5QrcodeScanner = new Html5Qrcode("reader");
     const config = { fps: 10, qrbox: { width: 250, height: 250 } };
     
@@ -206,7 +225,8 @@ async function onScanSuccess(decodedText) {
             didOpen: () => Swal.showLoading()
         });
 
-        const { error } = await supabase.from('genba_logs').insert([{
+        // GANTI 'supabase' JADI 'db'
+        const { error } = await db.from('genba_logs').insert([{
             user_name: currentUser.full_name,
             location_id: loc.id,
             shift: getShift()
@@ -233,7 +253,9 @@ async function onScanSuccess(decodedText) {
 
 async function loadChiefLogs() {
     const today = new Date().toISOString().split('T')[0];
-    const { data } = await supabase
+    
+    // GANTI 'supabase' JADI 'db'
+    const { data } = await db
         .from('genba_logs')
         .select('*, locations(name)')
         .gte('scan_time', today)
@@ -242,20 +264,21 @@ async function loadChiefLogs() {
         .limit(5);
 
     const ul = document.getElementById('chief-logs');
-    ul.innerHTML = '';
-    
-    if (data && data.length > 0) {
-        data.forEach(log => {
-            const li = document.createElement('li');
-            li.className = "bg-white p-3 rounded border border-slate-200 flex justify-between items-center";
-            li.innerHTML = `
-                <span class="font-bold text-sm text-slate-700">${log.locations.name}</span>
-                <span class="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">${new Date(log.scan_time).toLocaleTimeString()}</span>
-            `;
-            ul.appendChild(li);
-        });
-    } else {
-        ul.innerHTML = '<li class="text-center text-sm text-slate-400 py-2">Belum ada scan shift ini.</li>';
+    if(ul) {
+        ul.innerHTML = '';
+        if (data && data.length > 0) {
+            data.forEach(log => {
+                const li = document.createElement('li');
+                li.className = "bg-white p-3 rounded border border-slate-200 flex justify-between items-center";
+                li.innerHTML = `
+                    <span class="font-bold text-sm text-slate-700">${log.locations.name}</span>
+                    <span class="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">${new Date(log.scan_time).toLocaleTimeString()}</span>
+                `;
+                ul.appendChild(li);
+            });
+        } else {
+            ul.innerHTML = '<li class="text-center text-sm text-slate-400 py-2">Belum ada scan shift ini.</li>';
+        }
     }
 }
 
@@ -272,69 +295,76 @@ async function renderDashboard() {
     const today = new Date().toISOString().split('T')[0];
     const shiftNow = getShift();
 
-    // Ambil Lokasi & Log
-    const { data: locs } = await supabase.from('locations').select('*').order('id');
-    const { data: logs } = await supabase.from('genba_logs')
+    // GANTI 'supabase' JADI 'db'
+    const { data: locs } = await db.from('locations').select('*').order('id');
+    const { data: logs } = await db.from('genba_logs')
         .select('*')
         .eq('shift', shiftNow)
         .gte('scan_time', today);
 
     const container = document.getElementById('line-status-container');
+    if(!container) return;
+    
     container.innerHTML = '';
 
-    locs.forEach(loc => {
-        const log = logs.find(l => l.location_id === loc.id);
-        const isDone = !!log;
-
-        let html = '';
-        if (isDone) {
-            html = `
-            <div class="bg-green-50 border border-green-200 p-4 rounded-xl shadow-sm">
-                <div class="flex justify-between mb-2">
-                    <h4 class="font-bold text-sm text-slate-800">${loc.name}</h4>
-                    <i class="fa-solid fa-circle-check text-green-500 text-xl"></i>
-                </div>
-                <div class="mt-2 pt-2 border-t border-green-200">
-                    <p class="text-xs text-slate-500">Oleh: <b>${log.user_name}</b></p>
-                    <p class="text-xs text-slate-400">Jam: ${new Date(log.scan_time).toLocaleTimeString()}</p>
-                </div>
-            </div>`;
-        } else {
-            html = `
-            <div class="bg-white border-l-4 border-red-500 p-4 rounded-xl shadow-sm">
-                <div class="flex justify-between mb-2">
-                    <h4 class="font-bold text-sm text-slate-800 opacity-70">${loc.name}</h4>
-                    <i class="fa-solid fa-clock text-red-300 text-xl"></i>
-                </div>
-                <div class="mt-2 pt-2 border-t border-slate-100">
-                    <p class="text-xs text-red-500 font-bold">BELUM DIVISIT</p>
-                </div>
-            </div>`;
-        }
-        container.innerHTML += html;
-    });
+    if(locs) {
+        locs.forEach(loc => {
+            const log = logs ? logs.find(l => l.location_id === loc.id) : null;
+            const isDone = !!log;
+    
+            let html = '';
+            if (isDone) {
+                html = `
+                <div class="bg-green-50 border border-green-200 p-4 rounded-xl shadow-sm">
+                    <div class="flex justify-between mb-2">
+                        <h4 class="font-bold text-sm text-slate-800">${loc.name}</h4>
+                        <i class="fa-solid fa-circle-check text-green-500 text-xl"></i>
+                    </div>
+                    <div class="mt-2 pt-2 border-t border-green-200">
+                        <p class="text-xs text-slate-500">Oleh: <b>${log.user_name}</b></p>
+                        <p class="text-xs text-slate-400">Jam: ${new Date(log.scan_time).toLocaleTimeString()}</p>
+                    </div>
+                </div>`;
+            } else {
+                html = `
+                <div class="bg-white border-l-4 border-red-500 p-4 rounded-xl shadow-sm">
+                    <div class="flex justify-between mb-2">
+                        <h4 class="font-bold text-sm text-slate-800 opacity-70">${loc.name}</h4>
+                        <i class="fa-solid fa-clock text-red-300 text-xl"></i>
+                    </div>
+                    <div class="mt-2 pt-2 border-t border-slate-100">
+                        <p class="text-xs text-red-500 font-bold">BELUM DIVISIT</p>
+                    </div>
+                </div>`;
+            }
+            container.innerHTML += html;
+        });
+    }
 
     // Tabel Log Bawah
-    const { data: recent } = await supabase
+    // GANTI 'supabase' JADI 'db'
+    const { data: recent } = await db
         .from('genba_logs')
         .select('*, locations(name)')
         .order('scan_time', { ascending: false })
         .limit(10);
     
     const tbody = document.getElementById('all-logs-table');
-    tbody.innerHTML = '';
-    
-    if (recent) {
-        recent.forEach(r => {
-            const tr = document.createElement('tr');
-            tr.className = "border-b border-slate-100 hover:bg-slate-50";
-            tr.innerHTML = `
-                <td class="p-3 text-slate-500 text-xs">${new Date(r.scan_time).toLocaleString()}</td>
-                <td class="p-3 font-bold text-slate-700">${r.user_name}</td>
-                <td class="p-3 text-slate-600">${r.locations.name}</td>
-            `;
-            tbody.appendChild(tr);
-        });
+    if(tbody) {
+        tbody.innerHTML = '';
+        
+        if (recent) {
+            recent.forEach(r => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-slate-100 hover:bg-slate-50";
+                tr.innerHTML = `
+                    <td class="p-3 text-slate-500 text-xs">${new Date(r.scan_time).toLocaleString()}</td>
+                    <td class="p-3 font-bold text-slate-700">${r.user_name}</td>
+                    <td class="p-3 text-slate-600">${r.locations.name}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
     }
 }
 
@@ -342,8 +372,11 @@ async function renderDashboard() {
 // 9. MODE ADMIN (QR GENERATOR)
 // ==========================================
 async function initAdminMode() {
-    const { data: locs } = await supabase.from('locations').select('*').order('id');
+    // GANTI 'supabase' JADI 'db'
+    const { data: locs } = await db.from('locations').select('*').order('id');
     const container = document.getElementById('admin-qr-container');
+    if(!container) return;
+    
     container.innerHTML = '';
 
     if (locs) {
