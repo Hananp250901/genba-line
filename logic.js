@@ -323,18 +323,24 @@ async function renderDashboard() {
             } else {
                 // STATUS: BELUM (MERAH)
                 html = `
-                <div class="bg-white border-l-4 border-red-500 p-4 rounded-xl shadow-sm relative">
-                    <div class="absolute right-2 top-2 bg-red-100 text-red-600 text-[10px] font-bold px-2 py-1 rounded">
-                        ${shiftNow} </div>
-                    <div class="flex justify-between mb-2">
-                        <h4 class="font-bold text-sm text-slate-800 opacity-70">${loc.name}</h4>
-                        <i class="fa-solid fa-clock text-red-300 text-xl"></i>
-                    </div>
-                    <div class="mt-2 pt-2 border-t border-slate-100">
-                        <p class="text-xs text-red-500 font-bold animate-pulse">BELUM DIVISIT</p>
-                        <p class="text-[10px] text-slate-400">Menunggu scan...</p>
-                    </div>
-                </div>`;
+                    <div class="bg-white border-l-4 ${isDone ? 'border-green-500' : 'border-red-500'} p-4 rounded-xl shadow-sm">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <h4 class="font-bold text-sm text-slate-800">${loc.name}</h4>
+                                <span class="text-[10px] font-bold ${isDone ? 'text-green-600' : 'text-red-400'} uppercase">
+                                    ${isDone ? log.shift : shiftNow}
+                                </span>
+                            </div>
+                            <i class="fa-solid ${isDone ? 'fa-circle-check text-green-500' : 'fa-clock text-red-300'} text-xl"></i>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-slate-100">
+                            ${isDone ? 
+                                `<p class="text-xs text-slate-500">Oleh: <b>${log.user_name}</b></p>
+                                <p class="text-[10px] text-slate-400">Jam: ${formatWaktu(log.scan_time)}</p>` : 
+                                `<p class="text-xs text-red-500 font-bold">BELUM DIVISIT</p>`
+                            }
+                        </div>
+                    </div>`;
             }
             container.innerHTML += html;
         });
@@ -342,9 +348,9 @@ async function renderDashboard() {
 
     // Update Tabel Log Kecil di Bawah Dashboard (Realtime All Shift)
     const { data: recent } = await db.from('genba_logs').select('*, locations(name)')
-        .gte('scan_time', today) // Tampilkan semua shift hari ini biar Dept Head tau progress seharian
-        .order('scan_time', { ascending: false }).limit(5);
-    
+    .gte('scan_time', today)
+    .order('scan_time', { ascending: false }); // Hapus .limit(5) biar semua muncul
+
     const tbody = document.getElementById('all-logs-table');
     if(tbody) {
         tbody.innerHTML = '';
@@ -352,8 +358,11 @@ async function renderDashboard() {
             tbody.innerHTML += `
             <tr class="border-b border-slate-100">
                 <td class="p-3 text-slate-500 text-xs">${formatWaktu(r.scan_time)}</td>
-                <td class="p-3 font-bold text-slate-700">${r.user_name} <br> <span class="text-[10px] text-blue-500">${r.shift}</span></td>
-                <td class="p-3 text-slate-600 text-xs">${r.locations.name}</td>
+                <td class="p-3 font-bold text-slate-700">${r.user_name}</td> <td class="p-3 text-slate-600 text-xs">${r.locations.name}</td>
+                <td class="p-3"> <span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-1 rounded">
+                        ${r.shift}
+                    </span>
+                </td>
             </tr>`; 
         });
     }
@@ -413,19 +422,17 @@ async function cariHistory() {
         data.forEach(r => {
             // Kita pakai formatWaktu() yang tadi sudah kita benerin (Paksa WIB)
             const html = `
-            <tr class="border-b border-slate-100 hover:bg-slate-50">
-                <td class="p-3 text-slate-500 text-xs">
-                    <span class="font-bold text-slate-700 text-sm">${formatWaktu(r.scan_time)}</span><br>
-                    ${formatTanggal(r.scan_time)}
-                </td>
-                <td class="p-3 font-bold text-slate-700">${r.user_name}</td>
-                <td class="p-3 text-slate-600">${r.locations.name}</td>
-                <td class="p-3">
-                    <span class="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-1 rounded border border-blue-200">
-                        ${r.shift}
-                    </span>
-                </td>
-            </tr>`;
+                <tr class="border-b border-slate-100 hover:bg-slate-50">
+                    <td class="p-3 text-slate-500 text-xs">
+                        <span class="font-bold text-slate-700 text-sm">${formatWaktu(r.scan_time)}</span>
+                    </td>
+                    <td class="p-3 font-bold text-slate-700">${r.user_name}</td>
+                    <td class="p-3 text-slate-600 text-xs">${r.locations.name}</td>
+                    <td class="p-3"> <span class="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-1 rounded border border-blue-200">
+                            ${r.shift}
+                        </span>
+                    </td>
+                </tr>`;
             tbody.innerHTML += html;
         });
     } else {
