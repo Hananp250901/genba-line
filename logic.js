@@ -291,27 +291,15 @@ async function renderDashboard() {
     const today = new Date().toISOString().split('T')[0];
     const shiftNow = getShift();
 
-    // 1. QUERY DENGAN JOIN (PENTING: Ambil nama dari tabel locations)
-    // Kita urutkan scan_time DESCENDING biar jam terbaru ada di paling atas
-    const { data: allLogs, error: logError } = await db.from('genba_logs')
-        .select(`
-            *,
-            locations ( name )
-        `) // <--- Ini kuncinya biar dapet nama lokasi, bukan ID
+    // 1. Ambil data dengan Join Locations & Jam Terbaru (Descending)
+    const { data: allLogs } = await db.from('genba_logs')
+        .select('*, locations(name)')
         .eq('shift', shiftNow) 
         .gte('scan_time', today)
         .order('scan_time', { ascending: false });
 
-    if (logError) console.error("Error ambil log:", logError);
-
-    // 2. Tentukan Siapa Chief yang lagi Aktif
+    // 2. Tentukan Active Chief
     const activeUser = (allLogs && allLogs.length > 0) ? allLogs[0].user_name : null;
-
-    // Update Teks Info di Header Dashboard
-    const elShift = document.getElementById('monitor-shift');
-    if (elShift) {
-        elShift.innerHTML = `${shiftNow} <br> <span class="text-[10px] text-slate-500">ACTIVE: ${activeUser || 'BELUM ADA'}</span>`;
-    }
 
     const { data: locs } = await db.from('locations').select('*').order('id');
     const container = document.getElementById('line-status-container');
@@ -320,53 +308,67 @@ async function renderDashboard() {
     
     if(locs) {
         locs.forEach(loc => {
-            // Cari data scan milik Active Chief di lokasi ini
-            // Karena sudah di-sort DESC, .find() otomatis ambil JAM TERBARU
             const log = allLogs ? allLogs.find(l => l.location_id === loc.id && l.user_name === activeUser) : null;
             const isDone = !!log;
             
+            // Logic Animasi: Kalau sudah di-scan, kasih kelas animate-glow-success
+            const glowClass = isDone ? 'animate-glow-success border-green-500' : 'border-red-500';
+
             container.innerHTML += `
-            <div class="bg-white border-l-4 ${isDone ? 'border-green-500' : 'border-red-500'} p-4 rounded-xl shadow-sm">
-                <div class="flex justify-between items-start">
+            <div class="bg-white border-l-4 ${glowClass} p-5 rounded-2xl shadow-sm card-entry relative overflow-hidden transition-all duration-500">
+                ${isDone ? '<div class="absolute -right-2 -top-2 w-12 h-12 bg-green-500/10 rounded-full blur-xl"></div>' : ''}
+                
+                <div class="flex justify-between items-start relative z-10">
                     <div>
-                        <h4 class="font-bold text-sm text-slate-800 uppercase">${loc.name}</h4>
-                        <p class="text-[10px] font-bold ${isDone ? 'text-green-600' : 'text-slate-400'}">
-                            ${isDone ? 'SUDAH DI-SCAN' : 'BELUM VISIT'}
-                        </p>
+                        <h4 class="font-bold text-slate-800 text-sm tracking-tight">${loc.name}</h4>
+                        <div class="flex items-center gap-1 mt-1">
+                            <span class="w-2 h-2 rounded-full ${isDone ? 'bg-green-500' : 'bg-red-400 animate-pulse'}"></span>
+                            <span class="text-[10px] font-bold uppercase ${isDone ? 'text-green-600' : 'text-slate-400'}">
+                                ${isDone ? 'Visited' : 'Waiting'}
+                            </span>
+                        </div>
                     </div>
-                    <div class="text-2xl">${isDone ? '✅' : '⏰'}</div>
+                    <div class="text-2xl drop-shadow-sm">
+                        ${isDone ? '✅' : '⏰'}
+                    </div>
                 </div>
                 
-                <div class="mt-3 pt-2 border-t border-slate-50">
+                <div class="mt-4 pt-3 border-t border-slate-100 relative z-10">
                     ${isDone ? `
-                        <p class="text-[11px] text-slate-700 font-bold">${log.user_name}</p>
-                        <p class="text-[11px] text-blue-600 font-bold">Jam Terbaru: ${formatWaktu(log.scan_time)}</p>
+                        <p class="text-[11px] text-slate-500 mb-1">Last Scan by:</p>
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-slate-700 text-xs">${log.user_name}</span>
+                            <span class="text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
+                                ${formatWaktu(log.scan_time)}
+                            </span>
+                        </div>
                     ` : `
-                        <p class="text-[10px] text-red-500 font-bold animate-pulse">Menunggu Scan...</p>
+                        <p class="text-[10px] text-red-500 font-bold italic">Belum ada data masuk...</p>
                     `}
                 </div>
             </div>`;
         });
     }
 
-    // 3. TABEL RIWAYAT (Nampilin Nama Lokasi & Shift)
+    // Update Tabel bawah juga biar konsisten
+    renderHistoryTable(allLogs);
+}
+
+// Fungsi bantu biar rapi
+function renderHistoryTable(data) {
     const tbody = document.getElementById('all-logs-table');
-    if(tbody) {
-        tbody.innerHTML = '';
-        if (allLogs) {
-            allLogs.forEach(r => { 
-                tbody.innerHTML += `
-                <tr class="border-b border-slate-50 hover:bg-slate-50">
-                    <td class="p-3 font-bold text-slate-700 text-xs">${formatWaktu(r.scan_time)}</td>
-                    <td class="p-3 font-bold text-slate-800 text-xs">${r.user_name}</td>
-                    <td class="p-3 text-slate-600 text-xs font-bold">
-                        ${r.locations ? r.locations.name : 'ID: ' + r.location_id} </td>
-                    <td class="p-3">
-                        <span class="bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-1 rounded">${r.shift}</span>
-                    </td>
-                </tr>`; 
-            });
-        }
+    if(!tbody) return;
+    tbody.innerHTML = '';
+    if (data) {
+        data.forEach(r => { 
+            tbody.innerHTML += `
+            <tr class="border-b border-slate-50 hover:bg-blue-50/30 transition-colors">
+                <td class="p-3 font-mono text-blue-600 font-bold text-xs">${formatWaktu(r.scan_time)}</td>
+                <td class="p-3 font-bold text-slate-700 text-xs">${r.user_name}</td>
+                <td class="p-3 text-slate-600 text-xs">${r.locations ? r.locations.name : '-'}</td>
+                <td class="p-3"><span class="bg-slate-100 text-slate-600 text-[10px] font-black px-2 py-1 rounded uppercase">${r.shift}</span></td>
+            </tr>`; 
+        });
     }
 }
 async function loadAdminQR() {
