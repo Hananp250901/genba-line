@@ -7,7 +7,7 @@ const PROJECT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 // !!! GANTI INI DENGAN LINK GITHUB PAGES ANDA SETELAH DEPLOY !!!
 // Contoh: 'https://namauser.github.io/nama-repo/'
 // Pastikan diakhiri tanda tanya '?' agar parameter terbaca benar di QR
-const APP_BASE_URL = window.location.href.split('?')[0]; 
+const APP_BASE_URL = 'https://hananp250901.github.io/genba-line/?'; 
 
 let db;
 try {
