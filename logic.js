@@ -4,7 +4,7 @@
 const PROJECT_URL = 'https://fbfvhcwisvlyodwvmpqg.supabase.co';
 const PROJECT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZiZnZoY3dpc3ZseW9kd3ZtcHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MTQ2MzQsImV4cCI6MjA3MjM5MDYzNH0.mbn9B1xEr_8kmC2LOP5Jv5O7AEIK7Fa1gxrqJ91WNx4';
 
-// !!! GANTI LINK GITHUB ANDA DI SINI !!!
+// GANTI DENGAN LINK GITHUB ANDA
 const APP_BASE_URL = 'https://hananp250901.github.io/genba-line/?'; 
 
 let db;
@@ -17,68 +17,46 @@ let locations = [];
 let dashboardInterval = null;
 
 // ==========================================
-// 2. HELPER: FORMAT WAKTU WIB (VERSI PAKSA +7)
+// 2. FORMAT WAKTU (VERSI SIMPLE/NETRAL)
 // ==========================================
-function formatWIB(isoString) {
+function formatWaktu(isoString) {
     if (!isoString) return '-';
-    
-    // Trik: Jika string dari Supabase tidak ada 'Z' di belakangnya,
-    // Browser kadang mengira itu waktu lokal. Kita tambah 'Z' biar dianggap UTC.
-    if (!isoString.endsWith('Z') && !isoString.includes('+')) {
-        isoString += 'Z';
-    }
-
+    // Kita percaya sepenuhnya pada data Supabase & Jam HP User
     const date = new Date(isoString);
-
-    // Pakai Intl formatter yang paling akurat untuk konversi zona waktu
-    return new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Asia/Jakarta',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-    }).format(date);
+    return date.toLocaleTimeString('id-ID', {
+        hour: '2-digit', minute: '2-digit', hour12: false
+    });
 }
 
-function formatTanggalIndo(isoString) {
+function formatTanggal(isoString) {
     if (!isoString) return '-';
-    if (!isoString.endsWith('Z') && !isoString.includes('+')) isoString += 'Z';
-    
     const date = new Date(isoString);
-    return new Intl.DateTimeFormat('id-ID', {
-        timeZone: 'Asia/Jakarta',
+    return date.toLocaleDateString('id-ID', {
         day: 'numeric', month: 'short'
-    }).format(date);
+    });
 }
 
 function getShift() {
-    // Ambil jam sekarang, konversi ke WIB dulu baru ambil jam-nya
-    const now = new Date();
-    const wibString = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Jakarta',
-        hour: 'numeric', hour12: false
-    }).format(now);
-    
-    const h = parseInt(wibString);
-
+    // Ambil jam dari HP Chief saat ini
+    const h = new Date().getHours();
     if (h >= 7 && h < 15) return 'SHIFT 1';
     if (h >= 15 && h < 23) return 'SHIFT 2';
     return 'SHIFT 3';
 }
 
 function updateClock() {
-    const now = new Date();
-    const time = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Asia/Jakarta',
-        hour: '2-digit', minute: '2-digit', second: '2-digit'
-    }).format(now);
-
+    // Jam Realtime di Dashboard
     const elClock = document.getElementById('clock'); 
-    if (elClock) elClock.innerText = time;
+    if (elClock) {
+        elClock.innerText = new Date().toLocaleTimeString('id-ID', {
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        }).replace(/\./g, ':');
+    }
 
     const shift = getShift();
     const elShift = document.getElementById('monitor-shift'); 
     if (elShift) elShift.innerText = shift;
+    
     const elBadge = document.getElementById('chief-shift-badge'); 
     if (elBadge) elBadge.innerText = shift;
 }
@@ -102,7 +80,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ==========================================
-// 4. SCANNING LOGIC
+// 4. SCANNING LOGIC (URL)
 // ==========================================
 async function checkUrlScan() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -124,23 +102,21 @@ async function processScan(code) {
     if (loc) {
         Swal.fire({ title: 'Menyimpan...', text: loc.name, didOpen: () => Swal.showLoading() });
         
+        // PENTING: Biarkan Supabase mencatat waktu servernya sendiri
+        // Kita tidak kirim 'scan_time' dari sini agar konsisten
         const { error } = await db.from('genba_logs').insert([{
             user_name: currentUser.full_name,
             location_id: loc.id,
             shift: getShift()
-            // Biarkan Supabase mengisi scan_time (UTC), nanti kita konversi pas baca
         }]);
 
         if (!error) {
-            // Tampilkan jam sekarang WIB di alert sukses
-            const now = new Date();
-            const jamWib = new Intl.DateTimeFormat('en-GB', {
-                timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit'
-            }).format(now);
-
+            // Tampilkan jam HP saat ini untuk konfirmasi visual
+            const jamSekarang = new Date().toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
+            
             await Swal.fire({ 
                 icon: 'success', title: 'BERHASIL', 
-                text: `${loc.name} - ${jamWib}`, 
+                text: `${loc.name} - ${jamSekarang}`, 
                 timer: 2000, showConfirmButton: false 
             });
             loadChiefLogs();
@@ -202,12 +178,12 @@ function enterApplication(user) {
     document.getElementById('sidebar-role').innerText = user.role.toUpperCase();
     document.getElementById('user-initial').innerText = user.full_name.charAt(0);
 
-    // --- BAGIAN UBAH NAMA CHIEF ---
-    const welcomeChief = document.getElementById('welcome-chief');
-    if (welcomeChief) {
-        welcomeChief.innerText = `👋 Halo, ${user.full_name}!`;
+    // --- FITUR GANTI NAMA "HALO CHIEF" ---
+    // Pastikan di index.html sudah ada id="welcome-chief"
+    const welcomeEl = document.getElementById('welcome-chief');
+    if (welcomeEl) {
+        welcomeEl.innerText = `👋 Halo, ${user.full_name}!`;
     }
-    // -----------------------------
 
     updateMenu(user.role);
 
@@ -251,15 +227,15 @@ function updateMenu(role) {
 }
 
 // ==========================================
-// 7. LOAD DATA (DENGAN FORMAT JAM WIB YANG BENAR)
+// 7. LOAD DATA (JAM NETRAL)
 // ==========================================
 async function initChiefMode() { loadChiefLogs(); }
 async function initDeptHeadMode() { renderDashboard(); dashboardInterval = setInterval(renderDashboard, 10000); }
 async function initAdminMode() { loadAdminQR(); }
 
 async function loadChiefLogs() {
-    // Ambil data hari ini (berdasarkan Tanggal WIB)
-    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
+    // Filter hari ini (Format YYYY-MM-DD standar)
+    const today = new Date().toISOString().split('T')[0];
 
     const { data } = await db.from('genba_logs').select('*, locations(name)')
         .gte('scan_time', today).eq('user_name', currentUser.full_name)
@@ -272,13 +248,11 @@ async function loadChiefLogs() {
             data.forEach(log => {
                 const li = document.createElement('li');
                 li.className = "bg-white p-3 rounded border border-slate-200 flex justify-between items-center";
-                
-                // Gunakan formatWIB untuk jam yang benar
                 li.innerHTML = `
                     <span class="font-bold text-sm text-slate-700">${log.locations.name}</span>
                     <div class="text-right">
-                        <span class="block text-xs font-bold text-slate-700">${formatWIB(log.scan_time)}</span>
-                        <span class="text-[10px] text-slate-400">${formatTanggalIndo(log.scan_time)}</span>
+                        <span class="block text-xs font-bold text-slate-700">${formatWaktu(log.scan_time)}</span>
+                        <span class="text-[10px] text-slate-400">${formatTanggal(log.scan_time)}</span>
                     </div>
                 `;
                 ul.appendChild(li);
@@ -290,7 +264,7 @@ async function loadChiefLogs() {
 }
 
 async function renderDashboard() {
-    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
+    const today = new Date().toISOString().split('T')[0];
     const shiftNow = getShift();
     
     const { data: locs } = await db.from('locations').select('*').order('id');
@@ -305,9 +279,9 @@ async function renderDashboard() {
             const log = logs ? logs.find(l => l.location_id === loc.id) : null;
             const isDone = !!log;
             
-            let statusHtml = '';
+            let html = '';
             if (isDone) {
-                statusHtml = `
+                html = `
                 <div class="bg-green-50 border border-green-200 p-4 rounded-xl shadow-sm">
                     <div class="flex justify-between mb-2">
                         <h4 class="font-bold text-sm text-slate-800">${loc.name}</h4>
@@ -315,11 +289,11 @@ async function renderDashboard() {
                     </div>
                     <div class="mt-2 pt-2 border-t border-green-200">
                         <p class="text-xs text-slate-500">Oleh: <b>${log.user_name}</b></p>
-                        <p class="text-xs text-slate-400">Jam: ${formatWIB(log.scan_time)}</p>
+                        <p class="text-xs text-slate-400">Jam: ${formatWaktu(log.scan_time)}</p>
                     </div>
                 </div>`;
             } else {
-                statusHtml = `
+                html = `
                 <div class="bg-white border-l-4 border-red-500 p-4 rounded-xl shadow-sm">
                     <div class="flex justify-between mb-2">
                         <h4 class="font-bold text-sm text-slate-800 opacity-70">${loc.name}</h4>
@@ -330,7 +304,7 @@ async function renderDashboard() {
                     </div>
                 </div>`;
             }
-            container.innerHTML += statusHtml;
+            container.innerHTML += html;
         });
     }
 
@@ -343,7 +317,7 @@ async function renderDashboard() {
         if (recent) recent.forEach(r => { 
             tbody.innerHTML += `
             <tr class="border-b border-slate-100">
-                <td class="p-3 text-slate-500 text-xs">${formatWIB(r.scan_time)} <br> <span class="text-[10px]">${formatTanggalIndo(r.scan_time)}</span></td>
+                <td class="p-3 text-slate-500 text-xs">${formatWaktu(r.scan_time)} <br> <span class="text-[10px]">${formatTanggal(r.scan_time)}</span></td>
                 <td class="p-3 font-bold text-slate-700">${r.user_name}</td>
                 <td class="p-3 text-slate-600">${r.locations.name}</td>
             </tr>`; 
