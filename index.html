@@ -19,7 +19,7 @@
 </head>
 <body class="flex h-screen overflow-hidden text-slate-800">
 
-    <aside id="sidebar-panel" class="w-64 bg-slate-900 text-white flex-col hidden md:hidden">
+    <aside id="sidebar-panel" class="w-64 bg-slate-900 text-white flex-col hidden md:hidden z-50">
         <div class="p-6 border-b border-slate-700 flex items-center gap-3">
             <i class="fa-solid fa-paint-roller text-blue-400 text-2xl"></i>
             <div>
@@ -70,7 +70,7 @@
 
     <main class="flex-1 flex flex-col h-screen overflow-y-auto bg-slate-50 relative">
         
-        <header id="mobile-header" class="bg-white shadow-sm p-4 md:hidden flex justify-between items-center hidden-section sticky top-0 z-50">
+        <header id="mobile-header" class="bg-white shadow-sm p-4 md:hidden flex justify-between items-center hidden-section sticky top-0 z-40">
             <div class="flex items-center gap-2">
                 <i class="fa-solid fa-paint-roller text-blue-600"></i>
                 <h1 class="font-bold text-slate-800">GENBA PAINTING</h1>
@@ -94,6 +94,7 @@
                         </div>
                         <button type="submit" id="btn-login" class="w-full bg-blue-600 text-white py-3.5 rounded-lg font-bold hover:bg-blue-700 transition">MASUK SISTEM</button>
                     </form>
+                    <p class="text-xs text-center text-slate-400 mt-4">Database Connected</p>
                 </div>
             </section>
 
@@ -156,12 +157,12 @@
 
     <script>
         // ==========================================
-        // KONFIGURASI SUPABASE (GANTI INI!)
+        // KONFIGURASI SUPABASE (SUDAH SAYA ISI)
         // ==========================================
         const SUPABASE_URL = 'https://fbfvhcwisvlyodwvmpqg.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZiZnZoY3dpc3ZseW9kd3ZtcHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MTQ2MzQsImV4cCI6MjA3MjM5MDYzNH0.mbn9B1xEr_8kmC2LOP5Jv5O7AEIK7Fa1gxrqJ91WNx4';
         
-        // Inisialisasi Client Supabase (HANYA SEKALI DISINI)
+        // Inisialisasi Client Supabase
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         // --- GLOBAL VARIABLES ---
@@ -203,7 +204,8 @@
                 Swal.fire({ icon: 'success', title: `Halo, ${currentUser.full_name}`, toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
 
             } catch (err) {
-                Swal.fire('Gagal', 'Username tidak ditemukan. Coba: yanto / singgih / admin', 'error');
+                console.error(err);
+                Swal.fire('Gagal', 'Username salah atau koneksi database error. Coba: yanto / singgih / admin', 'error');
             } finally {
                 btn.innerText = 'MASUK SISTEM';
                 btn.disabled = false;
