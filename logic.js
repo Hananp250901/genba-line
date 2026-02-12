@@ -343,7 +343,7 @@ async function renderDashboard() {
                             </span>
                         </div>
                     ` : `
-                        <p class="text-[10px] text-red-500 font-bold italic">Belum ada data masuk...</p>
+                        <p class="text-[10px] text-red-500 font-bold italic">Line belum di genba...</p>
                     `}
                 </div>
             </div>`;
