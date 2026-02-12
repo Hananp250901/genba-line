@@ -21,21 +21,20 @@ let dashboardInterval = null;
 // ==========================================
 function formatWaktu(isoString) {
     if (!isoString) return '-';
-    // Kita percaya sepenuhnya pada data Supabase & Jam HP User
-    const date = new Date(isoString);
-    return date.toLocaleTimeString('id-ID', {
+    // Kita paksa konversi ke Asia/Jakarta biar ga ngikutin jam browser/device user yang aneh-aneh
+    return new Date(isoString).toLocaleTimeString('id-ID', {
+        timeZone: 'Asia/Jakarta', 
         hour: '2-digit', minute: '2-digit', hour12: false
     });
 }
 
 function formatTanggal(isoString) {
     if (!isoString) return '-';
-    const date = new Date(isoString);
-    return date.toLocaleDateString('id-ID', {
+    return new Date(isoString).toLocaleDateString('id-ID', {
+        timeZone: 'Asia/Jakarta',
         day: 'numeric', month: 'short'
     });
 }
-
 function getShift() {
     // Ambil jam dari HP Chief saat ini
     const h = new Date().getHours();
@@ -107,7 +106,8 @@ async function processScan(code) {
         const { error } = await db.from('genba_logs').insert([{
             user_name: currentUser.full_name,
             location_id: loc.id,
-            shift: getShift()
+            shift: getShift(),
+            scan_time: new Date().toISOString() // <--- INI TAMBAHANNYA
         }]);
 
         if (!error) {
