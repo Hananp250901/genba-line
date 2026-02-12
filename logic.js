@@ -276,22 +276,18 @@ async function loadChiefLogs() {
 }
 
 async function renderDashboard() {
-    // 1. Tentukan batas waktu HARI INI dan SHIFT SAAT INI
     const today = new Date().toISOString().split('T')[0];
-    const shiftNow = getShift(); // Ini yang bikin reset otomatis (Shift 1/2/3)
+    const shiftNow = getShift();
 
-    // Update Teks Shift di Pojok Kanan Atas
-    const elShift = document.getElementById('monitor-shift');
-    if (elShift) elShift.innerText = shiftNow; 
-
-    // 2. Ambil Lokasi & Log HANYA untuk Shift Saat Ini
+    // 1. Ambil Lokasi
     const { data: locs } = await db.from('locations').select('*').order('id');
     
-    // Kita filter: Hanya ambil data yang 'shift'-nya SAMA dengan shift sekarang
-    // Jadi kalau sekarang Shift 2, data Shift 1 tadi pagi GAK AKAN KEAMBIL (Otomatis Reset/Merah)
+    // 2. Ambil Log HANYA untuk User yang sedang Login & Shift Sekarang
+    // Ini kuncinya biar kalau ganti orang (login berbeda), dashboard langsung reset merah.
     const { data: logs } = await db.from('genba_logs')
         .select('*')
         .eq('shift', shiftNow) 
+        .eq('user_name', currentUser.full_name) // Logic: Hanya punya saya yang dihitung hijau
         .gte('scan_time', today);
 
     const container = document.getElementById('line-status-container');
@@ -300,71 +296,71 @@ async function renderDashboard() {
     
     if(locs) {
         locs.forEach(loc => {
-            // Cek apakah lokasi ini ada di daftar logs shift sekarang?
             const log = logs ? logs.find(l => l.location_id === loc.id) : null;
             const isDone = !!log;
             
-            let html = '';
-            if (isDone) {
-                // STATUS: SUDAH (HIJAU)
-                html = `
-                <div class="bg-green-50 border border-green-200 p-4 rounded-xl shadow-sm relative overflow-hidden">
-                    <div class="absolute right-0 top-0 bg-green-200 text-green-800 text-[10px] font-bold px-2 py-1 rounded-bl">
-                        ${log.shift} </div>
-                    <div class="flex justify-between mb-2 mt-2">
-                        <h4 class="font-bold text-sm text-slate-800">${loc.name}</h4>
-                        <i class="fa-solid fa-circle-check text-green-500 text-xl"></i>
+            // Kita pakai grid layout simple biar icon gak nabrak badge
+            container.innerHTML += `
+            <div class="bg-white border-l-4 ${isDone ? 'border-green-500' : 'border-red-500'} p-4 rounded-xl shadow-sm relative">
+                <div class="flex justify-between items-start">
+                    <div class="pr-8"> <h4 class="font-bold text-sm text-slate-800 leading-tight">${loc.name}</h4>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">${shiftNow}</span>
                     </div>
-                    <div class="mt-2 pt-2 border-t border-green-200">
-                        <p class="text-xs text-slate-500">Oleh: <b class="text-slate-800">${log.user_name}</b></p>
-                        <p class="text-xs text-slate-400">Scan: ${formatWaktu(log.scan_time)}</p>
+                    <div class="text-2xl">
+                        ${isDone ? 
+                            '<i class="fa-solid fa-circle-check text-green-500"></i>' : 
+                            '<i class="fa-solid fa-circle-xmark text-red-200"></i>'}
                     </div>
-                </div>`;
-            } else {
-                // STATUS: BELUM (MERAH)
-                html = `
-                    <div class="bg-white border-l-4 ${isDone ? 'border-green-500' : 'border-red-500'} p-4 rounded-xl shadow-sm">
-                        <div class="flex justify-between items-start mb-2">
-                            <div>
-                                <h4 class="font-bold text-sm text-slate-800">${loc.name}</h4>
-                                <span class="text-[10px] font-bold ${isDone ? 'text-green-600' : 'text-red-400'} uppercase">
-                                    ${isDone ? log.shift : shiftNow}
-                                </span>
+                </div>
+                
+                <div class="mt-4 pt-2 border-t border-slate-50">
+                    ${isDone ? `
+                        <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-[10px] text-green-700 font-bold">
+                                ${currentUser.full_name.charAt(0)}
                             </div>
-                            <i class="fa-solid ${isDone ? 'fa-circle-check text-green-500' : 'fa-clock text-red-300'} text-xl"></i>
+                            <div>
+                                <p class="text-[11px] text-slate-600 font-bold">Selesai Visit</p>
+                                <p class="text-[10px] text-slate-400">${formatWaktu(log.scan_time)}</p>
+                            </div>
                         </div>
-                        <div class="mt-2 pt-2 border-t border-slate-100">
-                            ${isDone ? 
-                                `<p class="text-xs text-slate-500">Oleh: <b>${log.user_name}</b></p>
-                                <p class="text-[10px] text-slate-400">Jam: ${formatWaktu(log.scan_time)}</p>` : 
-                                `<p class="text-xs text-red-500 font-bold">BELUM DIVISIT</p>`
-                            }
-                        </div>
-                    </div>`;
-            }
-            container.innerHTML += html;
+                    ` : `
+                        <p class="text-xs text-red-500 font-bold">BELUM DIVISIT</p>
+                        <p class="text-[10px] text-slate-400">Silahkan scan QR di area</p>
+                    `}
+                </div>
+            </div>`;
         });
     }
 
-    // Update Tabel Log Kecil di Bawah Dashboard (Realtime All Shift)
-    const { data: recent } = await db.from('genba_logs').select('*, locations(name)')
-    .gte('scan_time', today)
-    .order('scan_time', { ascending: false }); // Hapus .limit(5) biar semua muncul
-
+    // 3. TABEL LOG BAWAH (Show All Today)
+    const { data: recent } = await db.from('genba_logs')
+        .select('*, locations(name)')
+        .gte('scan_time', today)
+        .order('scan_time', { ascending: false }); // Tanpa limit agar semua muncul
+    
     const tbody = document.getElementById('all-logs-table');
     if(tbody) {
         tbody.innerHTML = '';
-        if (recent) recent.forEach(r => { 
-            tbody.innerHTML += `
-            <tr class="border-b border-slate-100">
-                <td class="p-3 text-slate-500 text-xs">${formatWaktu(r.scan_time)}</td>
-                <td class="p-3 font-bold text-slate-700">${r.user_name}</td> <td class="p-3 text-slate-600 text-xs">${r.locations.name}</td>
-                <td class="p-3"> <span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-1 rounded">
-                        ${r.shift}
-                    </span>
-                </td>
-            </tr>`; 
-        });
+        if (recent && recent.length > 0) {
+            recent.forEach(r => { 
+                tbody.innerHTML += `
+                <tr class="border-b border-slate-50 hover:bg-slate-50 transition">
+                    <td class="p-3 text-slate-500 text-xs font-mono">${formatWaktu(r.scan_time)}</td>
+                    <td class="p-3">
+                        <p class="font-bold text-slate-700 text-sm">${r.user_name}</p>
+                    </td>
+                    <td class="p-3 text-slate-600 text-xs">${r.locations ? r.locations.name : 'Unknown'}</td>
+                    <td class="p-3">
+                        <span class="inline-block bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded">
+                            ${r.shift}
+                        </span>
+                    </td>
+                </tr>`; 
+            });
+        } else {
+            tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs">Belum ada aktivitas hari ini</td></tr>';
+        }
     }
 }
 async function loadAdminQR() {
