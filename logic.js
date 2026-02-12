@@ -1,193 +1,185 @@
 // ==========================================
-// 1. CONFIG & DB
+// 1. CONFIG
 // ==========================================
 const PROJECT_URL = 'https://fbfvhcwisvlyodwvmpqg.supabase.co';
 const PROJECT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZiZnZoY3dpc3ZseW9kd3ZtcHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MTQ2MzQsImV4cCI6MjA3MjM5MDYzNH0.mbn9B1xEr_8kmC2LOP5Jv5O7AEIK7Fa1gxrqJ91WNx4';
 
-// !!! GANTI INI DENGAN LINK GITHUB ANDA SENDIRI !!!
+// !!! GANTI INI DENGAN LINK GITHUB ANDA !!!
+// Contoh: 'https://hananp250901.github.io/genba-line/?'
 const APP_BASE_URL = 'https://hananp250901.github.io/genba-line/?'; 
 
 let db;
 try {
     db = window.supabase.createClient(PROJECT_URL, PROJECT_KEY);
-    const statusEl = document.getElementById('login-status');
-    if(statusEl) { statusEl.innerText = "Server Connected ✅"; statusEl.classList.add('text-green-500'); }
 } catch (e) { console.error(e); }
 
-// ==========================================
-// 2. GLOBAL VARIABLES
-// ==========================================
 let currentUser = null;
 let locations = [];
 let dashboardInterval = null;
 
 // ==========================================
-// 3. INIT (YANG JALAN PERTAMA KALI)
+// 2. MAIN LOGIC
 // ==========================================
 document.addEventListener('DOMContentLoaded', async () => {
     setInterval(updateClock, 1000);
     updateClock();
 
-    // 1. Load Data Lokasi Dulu
-    const { data } = await db.from('locations').select('*');
-    if (data) locations = data;
+    // 1. AMBIL LOKASI (WAJIB DULUAN)
+    const { data, error } = await db.from('locations').select('*');
+    if (data) {
+        locations = data;
+        console.log("Lokasi loaded:", locations.length);
+    } else {
+        alert("Gagal load data lokasi dari database!");
+    }
 
-    // 2. CEK APAKAH ADA DATA LOGIN TERSIMPAN? (AUTO LOGIN)
+    // 2. CEK LOGIN & SCAN
     checkSession();
 
-    // 3. Event Listeners Tombol
+    // Listener
     const loginForm = document.getElementById('form-login');
     if(loginForm) loginForm.addEventListener('submit', handleLogin);
-
     document.getElementById('btn-logout-sidebar').addEventListener('click', logout);
     document.getElementById('btn-logout-mobile').addEventListener('click', logout);
 });
 
 // ==========================================
-// 4. LOGIC SESSION (AUTO LOGIN)
-// ==========================================
-function checkSession() {
-    // Cek memori HP
-    const savedUser = localStorage.getItem('genbaUser');
-    
-    if (savedUser) {
-        // JIKA ADA DATA, LANGSUNG MASUK (SKIP LOGIN PAGE)
-        currentUser = JSON.parse(savedUser);
-        console.log("Auto-login user:", currentUser.username);
-        enterApplication(currentUser);
-        
-        // Setelah masuk, cek apakah ada URL Scan?
-        checkUrlScan();
-    } else {
-        // JIKA TIDAK ADA, TAMPILKAN HALAMAN LOGIN
-        showSection('page-login');
-    }
-}
-
-function saveSession(user) {
-    // Simpan data user ke memori HP (Permanen)
-    localStorage.setItem('genbaUser', JSON.stringify(user));
-}
-
-function logout() {
-    // Hapus data dari memori HP
-    localStorage.removeItem('genbaUser');
-    if (dashboardInterval) clearInterval(dashboardInterval);
-    
-    // Refresh halaman agar bersih
-    window.location.href = window.location.pathname; 
-}
-
-// ==========================================
-// 5. LOGIN SYSTEM
-// ==========================================
-async function handleLogin(e) {
-    e.preventDefault();
-    const btn = document.getElementById('btn-login');
-    const input = document.getElementById('username-input');
-    const username = input.value.trim().toLowerCase();
-    if (!username) return;
-
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Loading...'; 
-    btn.disabled = true;
-
-    try {
-        const { data, error } = await db.from('users').select('*').eq('username', username).single();
-        if (error || !data) throw new Error('User not found');
-
-        // SIMPAN SESSION BIAR GAK LOGOUT SENDIRI
-        saveSession(data);
-        currentUser = data;
-        
-        enterApplication(currentUser);
-        checkUrlScan(); // Cek scan barangkali login dari QR
-
-        const Toast = Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 2000});
-        Toast.fire({icon: 'success', title: `Halo, ${currentUser.full_name}`});
-
-    } catch (err) {
-        Swal.fire('Gagal', 'Username salah.', 'error');
-    } finally {
-        btn.innerHTML = 'MASUK SISTEM'; 
-        btn.disabled = false;
-    }
-}
-
-function enterApplication(user) {
-    // Sembunyikan Login, Tampilkan Menu Utama
-    document.getElementById('page-login').classList.add('hidden-section');
-    document.getElementById('sidebar-panel').classList.remove('md:hidden');
-    document.getElementById('sidebar-panel').classList.add('md:flex');
-    document.getElementById('mobile-header').classList.remove('hidden-section');
-    
-    // Isi Data Profil Sidebar
-    document.getElementById('sidebar-username').innerText = user.full_name;
-    document.getElementById('sidebar-role').innerText = user.role.toUpperCase();
-    document.getElementById('user-initial').innerText = user.full_name.charAt(0);
-
-    // Generate Menu Sesuai Role
-    updateMenu(user.role);
-
-    // Arahkan ke Halaman Default
-    if (user.role === 'chief') initChiefMode();
-    else if (user.role === 'dept_head') initDeptHeadMode();
-    else if (user.role === 'admin') initAdminMode();
-    else showSection('page-chief');
-}
-
-// ==========================================
-// 6. URL SCANNING (SCAN DARI KAMERA HP)
+// 3. SCANNING PROCESS (DEBUG MODE)
 // ==========================================
 async function checkUrlScan() {
     const urlParams = new URLSearchParams(window.location.search);
     const scanCode = urlParams.get('scan');
 
-    // Hanya proses jika ada kode scan DAN user adalah Chief
-    if (scanCode && currentUser && currentUser.role === 'chief') {
-        // Hapus parameter URL agar bersih (biar kalau refresh gak scan ulang)
+    // DEBUG: Cek apakah ada parameter scan?
+    if (scanCode) {
+        // Hapus parameter biar ga loop, tapi simpan di variabel
         window.history.replaceState({}, document.title, window.location.pathname);
-        
+
+        if (!currentUser) {
+            Swal.fire('Login Dulu', 'Silakan login, lalu scan ulang.', 'warning');
+            return;
+        }
+
+        if (currentUser.role !== 'chief') {
+            Swal.fire('Akses Ditolak', 'Hanya Chief yang bisa scan.', 'error');
+            return;
+        }
+
+        // PROSES SCAN
         await processScan(scanCode);
     }
 }
 
 async function processScan(code) {
-    // Cari lokasi berdasarkan kode
+    // Tampilkan loading biar user tau sistem bekerja
+    Swal.fire({
+        title: 'Mendeteksi Scan...',
+        text: `Kode: ${code}`,
+        didOpen: () => Swal.showLoading()
+    });
+
+    // Cek apakah lokasi ada di list yang sudah di-load
+    // Kalau list kosong (karena internet lemot), kita fetch ulang paksa
+    if (locations.length === 0) {
+        const { data } = await db.from('locations').select('*');
+        if (data) locations = data;
+    }
+
     const loc = locations.find(l => l.code === code);
 
     if (loc) {
-        Swal.fire({ 
-            title: 'Memproses Scan...', 
-            text: `Lokasi: ${loc.name}`, 
-            didOpen: () => Swal.showLoading() 
-        });
-        
+        // LOKASI KETEMU, COBA SIMPAN
         const { error } = await db.from('genba_logs').insert([{
             user_name: currentUser.full_name,
             location_id: loc.id,
-            shift: getShift()
+            shift: getShift(),
+            scan_time: new Date().toISOString() // Paksa waktu sekarang
         }]);
 
         if (!error) {
-            await Swal.fire({ 
-                icon: 'success', 
-                title: 'BERHASIL!', 
-                text: `${loc.name} tersimpan.`, 
-                timer: 2000, 
-                showConfirmButton: false 
+            await Swal.fire({
+                icon: 'success',
+                title: 'BERHASIL MASUK!',
+                text: `${loc.name} tersimpan.`,
+                timer: 2000,
+                showConfirmButton: false
             });
+            // Refresh List
             loadChiefLogs();
         } else {
-            Swal.fire('Gagal', 'Koneksi database bermasalah', 'error');
+            console.error(error);
+            Swal.fire('Database Error', 'Gagal simpan: ' + error.message, 'error');
         }
     } else {
-        Swal.fire('Error', 'QR Code tidak dikenali dalam sistem.', 'error');
+        Swal.fire('Lokasi Tidak Dikenal', `Kode ${code} tidak ada di database Locations.`, 'error');
     }
 }
 
 // ==========================================
-// 7. UTILS & NAVIGASI
+// 4. SESSION & UTILS
 // ==========================================
+function checkSession() {
+    const savedUser = localStorage.getItem('genbaUser');
+    if (savedUser) {
+        currentUser = JSON.parse(savedUser);
+        enterApplication(currentUser);
+        // Cek scan SETELAH user dipastikan ada
+        setTimeout(checkUrlScan, 500); 
+    } else {
+        showSection('page-login');
+    }
+}
+
+async function handleLogin(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-login');
+    const input = document.getElementById('username-input');
+    const username = input.value.trim().toLowerCase();
+    
+    btn.innerText = 'Loading...'; btn.disabled = true;
+
+    try {
+        const { data, error } = await db.from('users').select('*').eq('username', username).single();
+        if (error || !data) throw new Error('User not found');
+
+        localStorage.setItem('genbaUser', JSON.stringify(data));
+        currentUser = data;
+        
+        enterApplication(currentUser);
+        checkUrlScan();
+
+        const Toast = Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 2000});
+        Toast.fire({icon: 'success', title: `Halo, ${currentUser.full_name}`});
+    } catch (err) {
+        Swal.fire('Error', 'Username salah.', 'error');
+    } finally {
+        btn.innerText = 'MASUK SISTEM'; btn.disabled = false;
+    }
+}
+
+function enterApplication(user) {
+    document.getElementById('page-login').classList.add('hidden-section');
+    document.getElementById('sidebar-panel').classList.remove('md:hidden');
+    document.getElementById('sidebar-panel').classList.add('md:flex');
+    document.getElementById('mobile-header').classList.remove('hidden-section');
+    
+    document.getElementById('sidebar-username').innerText = user.full_name;
+    document.getElementById('sidebar-role').innerText = user.role.toUpperCase();
+    document.getElementById('user-initial').innerText = user.full_name.charAt(0);
+
+    updateMenu(user.role);
+
+    if (user.role === 'chief') initChiefMode();
+    else if (user.role === 'dept_head') initDeptHeadMode();
+    else if (user.role === 'admin') initAdminMode();
+}
+
+function logout() {
+    localStorage.removeItem('genbaUser');
+    if (dashboardInterval) clearInterval(dashboardInterval);
+    window.location.href = window.location.pathname; 
+}
+
 function showSection(sectionId) {
     document.querySelectorAll('main section').forEach(el => el.classList.add('hidden-section'));
     const target = document.getElementById(sectionId);
@@ -199,7 +191,6 @@ function updateMenu(role) {
     if(!nav) return;
     nav.innerHTML = ''; 
     let menuItems = [];
-    
     if (role === 'admin') menuItems.push({ id: 'page-admin', icon: 'fa-qrcode', text: 'Manajemen QR' });
     if (role === 'chief') menuItems.push({ id: 'page-chief', icon: 'fa-list', text: 'Riwayat Scan' });
     if (role === 'dept_head') menuItems.push({ id: 'page-depthead', icon: 'fa-chart-line', text: 'Dashboard' });
@@ -211,8 +202,6 @@ function updateMenu(role) {
         btn.onclick = () => showSection(item.id);
         nav.appendChild(btn);
     });
-    
-    // Buka halaman pertama dari menu
     if (menuItems.length > 0) showSection(menuItems[0].id);
 }
 
@@ -231,7 +220,7 @@ function updateClock() {
 }
 
 // ==========================================
-// 8. HALAMAN PER ROLE
+// 5. DATA LOADING
 // ==========================================
 async function initChiefMode() { loadChiefLogs(); }
 async function initDeptHeadMode() { renderDashboard(); dashboardInterval = setInterval(renderDashboard, 10000); }
