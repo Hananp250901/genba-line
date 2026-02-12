@@ -4,9 +4,7 @@
 const PROJECT_URL = 'https://fbfvhcwisvlyodwvmpqg.supabase.co';
 const PROJECT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZiZnZoY3dpc3ZseW9kd3ZtcHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MTQ2MzQsImV4cCI6MjA3MjM5MDYzNH0.mbn9B1xEr_8kmC2LOP5Jv5O7AEIK7Fa1gxrqJ91WNx4';
 
-// !!! GANTI INI DENGAN LINK GITHUB PAGES ANDA SETELAH DEPLOY !!!
-// Contoh: 'https://namauser.github.io/nama-repo/'
-// Pastikan diakhiri tanda tanya '?' agar parameter terbaca benar di QR
+// !!! GANTI INI DENGAN LINK GITHUB ANDA SENDIRI !!!
 const APP_BASE_URL = 'https://hananp250901.github.io/genba-line/?'; 
 
 let db;
@@ -17,91 +15,72 @@ try {
 } catch (e) { console.error(e); }
 
 // ==========================================
-// 2. GLOBAL VARS
+// 2. GLOBAL VARIABLES
 // ==========================================
 let currentUser = null;
 let locations = [];
 let dashboardInterval = null;
 
 // ==========================================
-// 3. INIT & LISTENER
+// 3. INIT (YANG JALAN PERTAMA KALI)
 // ==========================================
 document.addEventListener('DOMContentLoaded', async () => {
     setInterval(updateClock, 1000);
     updateClock();
 
-    // Load Locations dulu (penting buat validasi scan)
+    // 1. Load Data Lokasi Dulu
     const { data } = await db.from('locations').select('*');
     if (data) locations = data;
 
-    // Cek Login
+    // 2. CEK APAKAH ADA DATA LOGIN TERSIMPAN? (AUTO LOGIN)
     checkSession();
 
-    // Event Listeners
+    // 3. Event Listeners Tombol
     const loginForm = document.getElementById('form-login');
     if(loginForm) loginForm.addEventListener('submit', handleLogin);
+
     document.getElementById('btn-logout-sidebar').addEventListener('click', logout);
     document.getElementById('btn-logout-mobile').addEventListener('click', logout);
 });
 
 // ==========================================
-// 4. LOGIC URL SCANNING (MAGIC LINK)
-// ==========================================
-async function checkUrlScan() {
-    // Ambil parameter ?scan=LOC-001 dari URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const scanCode = urlParams.get('scan');
-
-    if (scanCode && currentUser && currentUser.role === 'chief') {
-        // Tampilkan loading
-        document.getElementById('scan-processing').classList.remove('hidden-section');
-        
-        // Bersihkan URL supaya kalau refresh ga scan lagi
-        window.history.replaceState({}, document.title, window.location.pathname);
-
-        await processScan(scanCode);
-    }
-}
-
-async function processScan(code) {
-    const loc = locations.find(l => l.code === code);
-
-    if (loc) {
-        Swal.fire({ title: 'Memproses...', text: `Lokasi: ${loc.name}`, didOpen: () => Swal.showLoading() });
-        
-        const { error } = await db.from('genba_logs').insert([{
-            user_name: currentUser.full_name,
-            location_id: loc.id,
-            shift: getShift()
-        }]);
-
-        document.getElementById('scan-processing').classList.add('hidden-section');
-
-        if (!error) {
-            await Swal.fire({ icon: 'success', title: 'GENBA OK!', text: `${loc.name} berhasil.`, timer: 2000, showConfirmButton: false });
-            loadChiefLogs();
-        } else {
-            Swal.fire('Gagal', 'Koneksi error', 'error');
-        }
-    } else {
-        document.getElementById('scan-processing').classList.add('hidden-section');
-        Swal.fire('QR Salah', 'Kode lokasi tidak dikenali.', 'error');
-    }
-}
-
-// ==========================================
-// 5. SESSION & LOGIN
+// 4. LOGIC SESSION (AUTO LOGIN)
 // ==========================================
 function checkSession() {
+    // Cek memori HP
     const savedUser = localStorage.getItem('genbaUser');
+    
     if (savedUser) {
+        // JIKA ADA DATA, LANGSUNG MASUK (SKIP LOGIN PAGE)
         currentUser = JSON.parse(savedUser);
+        console.log("Auto-login user:", currentUser.username);
         enterApplication(currentUser);
-        // Cek apakah ada Scan di URL setelah login berhasil
+        
+        // Setelah masuk, cek apakah ada URL Scan?
         checkUrlScan();
+    } else {
+        // JIKA TIDAK ADA, TAMPILKAN HALAMAN LOGIN
+        showSection('page-login');
     }
 }
 
+function saveSession(user) {
+    // Simpan data user ke memori HP (Permanen)
+    localStorage.setItem('genbaUser', JSON.stringify(user));
+}
+
+function logout() {
+    // Hapus data dari memori HP
+    localStorage.removeItem('genbaUser');
+    if (dashboardInterval) clearInterval(dashboardInterval);
+    
+    // Refresh halaman agar bersih
+    window.location.href = window.location.pathname; 
+}
+
+// ==========================================
+// 5. LOGIN SYSTEM
+// ==========================================
 async function handleLogin(e) {
     e.preventDefault();
     const btn = document.getElementById('btn-login');
@@ -109,54 +88,105 @@ async function handleLogin(e) {
     const username = input.value.trim().toLowerCase();
     if (!username) return;
 
-    btn.innerHTML = 'Loading...'; btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Loading...'; 
+    btn.disabled = true;
 
     try {
         const { data, error } = await db.from('users').select('*').eq('username', username).single();
         if (error || !data) throw new Error('User not found');
 
-        localStorage.setItem('genbaUser', JSON.stringify(data));
+        // SIMPAN SESSION BIAR GAK LOGOUT SENDIRI
+        saveSession(data);
         currentUser = data;
-        enterApplication(currentUser);
         
-        // Cek Scan setelah login manual
-        checkUrlScan();
+        enterApplication(currentUser);
+        checkUrlScan(); // Cek scan barangkali login dari QR
 
         const Toast = Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 2000});
         Toast.fire({icon: 'success', title: `Halo, ${currentUser.full_name}`});
+
     } catch (err) {
         Swal.fire('Gagal', 'Username salah.', 'error');
     } finally {
-        btn.innerText = 'MASUK SISTEM'; btn.disabled = false;
+        btn.innerHTML = 'MASUK SISTEM'; 
+        btn.disabled = false;
     }
 }
 
 function enterApplication(user) {
+    // Sembunyikan Login, Tampilkan Menu Utama
     document.getElementById('page-login').classList.add('hidden-section');
     document.getElementById('sidebar-panel').classList.remove('md:hidden');
     document.getElementById('sidebar-panel').classList.add('md:flex');
     document.getElementById('mobile-header').classList.remove('hidden-section');
     
+    // Isi Data Profil Sidebar
     document.getElementById('sidebar-username').innerText = user.full_name;
     document.getElementById('sidebar-role').innerText = user.role.toUpperCase();
     document.getElementById('user-initial').innerText = user.full_name.charAt(0);
 
+    // Generate Menu Sesuai Role
     updateMenu(user.role);
 
+    // Arahkan ke Halaman Default
     if (user.role === 'chief') initChiefMode();
-    if (user.role === 'dept_head') initDeptHeadMode();
-    if (user.role === 'admin') initAdminMode();
-}
-
-function logout() {
-    localStorage.removeItem('genbaUser');
-    if (dashboardInterval) clearInterval(dashboardInterval);
-    // Redirect ke home bersih tanpa parameter
-    window.location.href = window.location.pathname;
+    else if (user.role === 'dept_head') initDeptHeadMode();
+    else if (user.role === 'admin') initAdminMode();
+    else showSection('page-chief');
 }
 
 // ==========================================
-// 6. UTILS & NAVIGATION
+// 6. URL SCANNING (SCAN DARI KAMERA HP)
+// ==========================================
+async function checkUrlScan() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const scanCode = urlParams.get('scan');
+
+    // Hanya proses jika ada kode scan DAN user adalah Chief
+    if (scanCode && currentUser && currentUser.role === 'chief') {
+        // Hapus parameter URL agar bersih (biar kalau refresh gak scan ulang)
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        await processScan(scanCode);
+    }
+}
+
+async function processScan(code) {
+    // Cari lokasi berdasarkan kode
+    const loc = locations.find(l => l.code === code);
+
+    if (loc) {
+        Swal.fire({ 
+            title: 'Memproses Scan...', 
+            text: `Lokasi: ${loc.name}`, 
+            didOpen: () => Swal.showLoading() 
+        });
+        
+        const { error } = await db.from('genba_logs').insert([{
+            user_name: currentUser.full_name,
+            location_id: loc.id,
+            shift: getShift()
+        }]);
+
+        if (!error) {
+            await Swal.fire({ 
+                icon: 'success', 
+                title: 'BERHASIL!', 
+                text: `${loc.name} tersimpan.`, 
+                timer: 2000, 
+                showConfirmButton: false 
+            });
+            loadChiefLogs();
+        } else {
+            Swal.fire('Gagal', 'Koneksi database bermasalah', 'error');
+        }
+    } else {
+        Swal.fire('Error', 'QR Code tidak dikenali dalam sistem.', 'error');
+    }
+}
+
+// ==========================================
+// 7. UTILS & NAVIGASI
 // ==========================================
 function showSection(sectionId) {
     document.querySelectorAll('main section').forEach(el => el.classList.add('hidden-section'));
@@ -169,8 +199,9 @@ function updateMenu(role) {
     if(!nav) return;
     nav.innerHTML = ''; 
     let menuItems = [];
+    
     if (role === 'admin') menuItems.push({ id: 'page-admin', icon: 'fa-qrcode', text: 'Manajemen QR' });
-    if (role === 'chief') menuItems.push({ id: 'page-chief', icon: 'fa-list', text: 'Riwayat Scan' }); // Ganti Icon
+    if (role === 'chief') menuItems.push({ id: 'page-chief', icon: 'fa-list', text: 'Riwayat Scan' });
     if (role === 'dept_head') menuItems.push({ id: 'page-depthead', icon: 'fa-chart-line', text: 'Dashboard' });
 
     menuItems.forEach(item => {
@@ -180,6 +211,8 @@ function updateMenu(role) {
         btn.onclick = () => showSection(item.id);
         nav.appendChild(btn);
     });
+    
+    // Buka halaman pertama dari menu
     if (menuItems.length > 0) showSection(menuItems[0].id);
 }
 
@@ -198,11 +231,11 @@ function updateClock() {
 }
 
 // ==========================================
-// 7. CHIEF PAGE
+// 8. HALAMAN PER ROLE
 // ==========================================
-async function initChiefMode() {
-    loadChiefLogs();
-}
+async function initChiefMode() { loadChiefLogs(); }
+async function initDeptHeadMode() { renderDashboard(); dashboardInterval = setInterval(renderDashboard, 10000); }
+async function initAdminMode() { loadAdminQR(); }
 
 async function loadChiefLogs() {
     const today = new Date().toISOString().split('T')[0];
@@ -226,13 +259,6 @@ async function loadChiefLogs() {
     }
 }
 
-// ==========================================
-// 8. DASHBOARD
-// ==========================================
-async function initDeptHeadMode() {
-    renderDashboard();
-    dashboardInterval = setInterval(renderDashboard, 10000);
-}
 async function renderDashboard() {
     const today = new Date().toISOString().split('T')[0];
     const shiftNow = getShift();
@@ -260,10 +286,7 @@ async function renderDashboard() {
     }
 }
 
-// ==========================================
-// 9. ADMIN QR GENERATOR (VERSI URL)
-// ==========================================
-async function initAdminMode() {
+async function loadAdminQR() {
     const { data: locs } = await db.from('locations').select('*').order('id');
     const container = document.getElementById('admin-qr-container');
     if(!container) return;
@@ -272,15 +295,9 @@ async function initAdminMode() {
         locs.forEach(loc => {
             const div = document.createElement('div');
             div.className = "bg-white border border-slate-200 p-4 rounded-lg flex flex-col items-center text-center";
-            
-            // GENERATE LINK PENUH
-            // Hasil: https://alamatweb.com/?scan=LOC-001
-            const fullLink = APP_BASE_URL + '?scan=' + loc.code;
-
+            const fullLink = APP_BASE_URL + 'scan=' + loc.code;
             div.innerHTML = `<h4 class="font-bold text-sm mb-2 text-slate-700">${loc.name}</h4><div id="qr-${loc.id}" class="mb-3 p-2 border rounded"></div><p class="text-[10px] text-slate-400 break-all mb-2">${fullLink}</p><button class="btn-print bg-slate-800 text-white text-xs px-4 py-2 rounded hover:bg-black transition">Print</button>`;
-            
             setTimeout(() => { new QRCode(div.querySelector(`#qr-${loc.id}`), { text: fullLink, width: 100, height: 100 }); }, 100);
-            
             div.querySelector('.btn-print').onclick = () => {
                 const html = div.querySelector(`#qr-${loc.id}`).innerHTML;
                 const win = window.open('', '', 'width=400,height=500'); 
