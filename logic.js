@@ -231,22 +231,29 @@ function updateMenu(role) {
 // ==========================================
 async function initChiefMode() { loadChiefLogs(); }
 async function initDeptHeadMode() {
-    // 1. Set default tanggal di input filter (WIB)
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
-    const dateInput = document.getElementById('filter-date');
-    if(dateInput) dateInput.value = today;
-
-    // 2. Jalankan render pertama kali
+    // 1. Tampilkan data awal dulu pas masuk
     renderDashboard();
 
-    // 3. PASANG REALTIME: Gak perlu refresh lagi!
-    // Tiap ada data masuk (INSERT) ke genba_logs, dashboard langsung update otomatis.
-    db.channel('custom-all-channel')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'genba_logs' }, () => {
-          console.log('Ada scan baru masuk! Update dashboard...');
-          renderDashboard(); 
-      })
-      .subscribe();
+    // 2. Buat saluran (Channel) untuk memantau tabel genba_logs
+    const subscription = db
+        .channel('hnndev') // Nama bebas
+        .on(
+            'postgres_changes', 
+            { 
+                event: 'INSERT', // Pantau tiap ada data masuk baru
+                schema: 'public', 
+                table: 'genba_logs' 
+            }, 
+            (payload) => {
+                console.log('Ada Scan Baru Masuk!', payload);
+                // 3. Panggil ulang fungsi render tanpa perlu refresh browser
+                renderDashboard(); 
+            }
+        )
+        .subscribe();
+
+    // Opsional: Simpan subscription ke variabel global kalau lu mau unsubscribe pas logout
+    window.currentSubscription = subscription;
 }
 async function initAdminMode() { loadAdminQR(); }
 
