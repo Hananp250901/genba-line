@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Genba Painting</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .sidebar { transition: all 0.3s; }
+        .hidden-section { display: none; }
+        /* Scanner Styles */
+        #reader { width: 100%; border-radius: 10px; overflow: hidden; }
+        .status-card { transition: transform 0.2s; }
+        .status-card:hover { transform: translateY(-5px); }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+
+    <aside class="sidebar w-64 bg-slate-900 text-white flex flex-col hidden md:flex">
+        <div class="p-6 border-b border-slate-700 flex items-center gap-3">
+            <i class="fa-solid fa-paint-roller text-blue-400 text-2xl"></i>
+            <div>
+                <h1 class="font-bold text-lg">GENBA SYSTEM</h1>
+                <p class="text-xs text-slate-400">Painting Dept.</p>
+            </div>
+        </div>
+        
+        <nav class="flex-1 p-4 space-y-2">
+            <button onclick="logout()" class="w-full text-left px-4 py-3 rounded hover:bg-slate-800 text-red-400">
+                <i class="fa-solid fa-power-off w-6"></i> Logout
+            </button>
+        </nav>
+
+        <div class="p-4 border-t border-slate-700">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center font-bold" id="user-initial">U</div>
+                <div>
+                    <p class="text-sm font-semibold" id="sidebar-username">User</p>
+                    <p class="text-xs text-slate-400" id="sidebar-role">Role</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-screen overflow-y-auto">
+        <header class="bg-white shadow p-4 md:hidden flex justify-between items-center">
+            <h1 class="font-bold text-slate-800">GENBA PAINTING</h1>
+            <button onclick="logout()" class="text-red-500"><i class="fa-solid fa-power-off"></i></button>
+        </header>
+
+        <div class="p-6">
+            
+            <section id="page-login" class="max-w-md mx-auto mt-10 bg-white p-8 rounded-xl shadow-lg">
+                <div class="text-center mb-6">
+                    <i class="fa-solid fa-shield-halved text-4xl text-blue-600 mb-2"></i>
+                    <h2 class="text-2xl font-bold text-slate-800">Login Sistem</h2>
+                    <p class="text-slate-500">Pilih identitas Anda</p>
+                </div>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Pilih User</label>
+                        <select id="login-select" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
+                            <option value="">-- Pilih Nama --</option>
+                            </select>
+                    </div>
+                    <button onclick="handleLogin()" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-500/30">
+                        MASUK SISTEM
+                    </button>
+                </div>
+            </section>
+
+            <section id="page-chief" class="hidden-section max-w-lg mx-auto">
+                <div class="bg-white p-6 rounded-xl shadow-md mb-6">
+                    <h2 class="text-xl font-bold mb-2">👋 Halo, Chief!</h2>
+                    <p class="text-slate-500 text-sm">Silakan scan barcode di area line.</p>
+                    <div class="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100 flex justify-between">
+                        <span class="font-bold text-blue-800">Shift Saat Ini:</span>
+                        <span id="current-shift-display" class="font-mono text-blue-600">Loading...</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-xl shadow-lg">
+                    <div id="reader"></div>
+                    <p class="text-center text-slate-400 text-xs mt-2">Arahkan kamera ke QR Code Line</p>
+                </div>
+
+                <div class="mt-6">
+                    <h3 class="font-bold text-slate-700 mb-3">Riwayat Scan Hari Ini</h3>
+                    <ul id="chief-logs" class="space-y-2">
+                        </ul>
+                </div>
+            </section>
+
+            <section id="page-depthead" class="hidden-section">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">Dashboard Monitoring</h2>
+                        <p class="text-slate-500">Pantau aktivitas Genba Line Painting</p>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-3xl font-bold text-blue-600" id="clock">00:00</div>
+                        <div class="text-sm font-bold bg-yellow-100 text-yellow-800 px-3 py-1 rounded mt-1 inline-block" id="monitor-shift">SHIFT ?</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" id="line-status-container">
+                    </div>
+
+                <div class="mt-8 bg-white p-6 rounded-xl shadow">
+                    <h3 class="font-bold text-lg mb-4">Log Aktivitas Terbaru</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="text-slate-500 border-b">
+                                    <th class="p-3">Waktu</th>
+                                    <th class="p-3">Chief</th>
+                                    <th class="p-3">Lokasi</th>
+                                    <th class="p-3">Shift</th>
+                                </tr>
+                            </thead>
+                            <tbody id="all-logs-table">
+                                </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="page-admin" class="hidden-section">
+                <div class="bg-white p-6 rounded-xl shadow-md mb-6">
+                    <h2 class="text-xl font-bold mb-4">Admin Panel - Manajemen QR</h2>
+                    <p class="mb-4">Klik tombol print untuk mencetak QR Code per Line.</p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="admin-qr-container">
+                        </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <script>
+        // --- KONFIGURASI SUPABASE ---
+        // GANTI DENGAN DATA PROYEK ANDA DARI SUPABASE SETTINGS
+        const SUPABASE_URL = 'https://fbfvhcwisvlyodwvmpqg.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZiZnZoY3dpc3ZseW9kd3ZtcHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MTQ2MzQsImV4cCI6MjA3MjM5MDYzNH0.mbn9B1xEr_8kmC2LOP5Jv5O7AEIK7Fa1gxrqJ91WNx4';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // --- STATE & VARIABEL ---
+        let currentUser = null;
+        let locations = [];
+        let html5QrcodeScanner = null;
+
+        // --- INIT ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadUsersForLogin();
+            setInterval(updateClock, 1000);
+        });
+
+        // --- FUNGSI LOGIN & NAVIGASI ---
+        async function loadUsersForLogin() {
+            const { data, error } = await supabase.from('users').select('*');
+            if (error) return console.error(error);
+            
+            const select = document.getElementById('login-select');
+            data.forEach(user => {
+                const opt = document.createElement('option');
+                opt.value = JSON.stringify(user);
+                opt.text = `${user.full_name} (${user.role.toUpperCase()})`;
+                select.appendChild(opt);
+            });
+        }
+
+        function handleLogin() {
+            const val = document.getElementById('login-select').value;
+            if (!val) return Swal.fire('Error', 'Pilih user dulu', 'error');
+            
+            currentUser = JSON.parse(val);
+            
+            // Set Sidebar Info
+            document.getElementById('sidebar-username').innerText = currentUser.full_name;
+            document.getElementById('sidebar-role').innerText = currentUser.role.toUpperCase();
+            document.getElementById('user-initial').innerText = currentUser.full_name.charAt(0);
+
+            // Hide Login, Show Role Page
+            document.getElementById('page-login').classList.add('hidden-section');
+            
+            if (currentUser.role === 'chief') {
+                document.getElementById('page-chief').classList.remove('hidden-section');
+                initChiefMode();
+            } else if (currentUser.role === 'dept_head') {
+                document.getElementById('page-depthead').classList.remove('hidden-section');
+                initDeptHeadMode();
+            } else if (currentUser.role === 'admin') {
+                document.getElementById('page-admin').classList.remove('hidden-section');
+                initAdminMode();
+            }
+        }
+
+        function logout() {
+            location.reload();
+        }
+
+        // --- LOGIC UMUM (WAKTU & SHIFT) ---
+        function getShift() {
+            const now = new Date();
+            const hour = now.getHours();
+            // Shift 1: 07:00 - 15:00
+            // Shift 2: 15:00 - 23:00
+            // Shift 3: 23:00 - 07:00
+            if (hour >= 7 && hour < 15) return 'SHIFT 1';
+            if (hour >= 15 && hour < 23) return 'SHIFT 2';
+            return 'SHIFT 3';
+        }
+
+        function updateClock() {
+            const now = new Date();
+            if(document.getElementById('clock')) {
+                document.getElementById('clock').innerText = now.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'});
+                document.getElementById('monitor-shift').innerText = getShift();
+            }
+        }
+
+        // --- MODE CHIEF (SCANNER) ---
+        async function initChiefMode() {
+            document.getElementById('current-shift-display').innerText = getShift();
+            
+            // Load Locations untuk validasi
+            const { data } = await supabase.from('locations').select('*');
+            locations = data;
+
+            // Start Scanner
+            startScanner();
+            loadChiefLogs();
+        }
+
+        function startScanner() {
+            html5QrcodeScanner = new Html5Qrcode("reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            
+            html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess);
+        }
+
+        async function onScanSuccess(decodedText, decodedResult) {
+            // Pause scanning agar tidak double input
+            html5QrcodeScanner.pause();
+
+            // Cek apakah QR valid (ada di database locations)
+            const matchedLocation = locations.find(loc => loc.code === decodedText);
+
+            if (matchedLocation) {
+                // Simpan ke Supabase
+                const { error } = await supabase.from('genba_logs').insert([{
+                    user_name: currentUser.full_name,
+                    location_id: matchedLocation.id,
+                    shift: getShift()
+                }]);
+
+                if (!error) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'GENBA OK!',
+                        text: `Lokasi: ${matchedLocation.name} berhasil discan.`,
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                    loadChiefLogs(); // Refresh list log bawah
+                } else {
+                    Swal.fire('Error', 'Gagal menyimpan data', 'error');
+                }
+            } else {
+                Swal.fire('Error', 'QR Code Tidak Dikenali!', 'error');
+            }
+
+            // Resume scanning setelah 2.5 detik
+            setTimeout(() => {
+                html5QrcodeScanner.resume();
+            }, 2500);
+        }
+
+        async function loadChiefLogs() {
+            // Ambil log hari ini
+            const today = new Date().toISOString().split('T')[0];
+            const { data } = await supabase
+                .from('genba_logs')
+                .select('*, locations(name)')
+                .gte('scan_time', today)
+                .eq('user_name', currentUser.full_name)
+                .order('scan_time', { ascending: false })
+                .limit(5);
+
+            const ul = document.getElementById('chief-logs');
+            ul.innerHTML = '';
+            data.forEach(log => {
+                const li = document.createElement('li');
+                li.className = 'bg-white p-3 rounded shadow-sm border-l-4 border-green-500 flex justify-between';
+                li.innerHTML = `
+                    <span class="font-bold text-slate-700">${log.locations.name}</span>
+                    <span class="text-xs text-slate-400 self-center">${new Date(log.scan_time).toLocaleTimeString()}</span>
+                `;
+                ul.appendChild(li);
+            });
+        }
+
+
+        // --- MODE DEPT HEAD (MONITORING) ---
+        async function initDeptHeadMode() {
+            updateClock();
+            renderDashboard();
+            // Auto refresh setiap 10 detik
+            setInterval(renderDashboard, 10000);
+        }
+
+        async function renderDashboard() {
+            // 1. Ambil semua lokasi
+            const { data: locs } = await supabase.from('locations').select('*').order('id');
+            
+            // 2. Ambil log scan untuk SHIFT SAAT INI dan HARI INI
+            const shiftNow = getShift();
+            const today = new Date().toISOString().split('T')[0];
+            
+            const { data: logs } = await supabase
+                .from('genba_logs')
+                .select('*')
+                .eq('shift', shiftNow)
+                .gte('scan_time', today);
+
+            // 3. Mapping data
+            const container = document.getElementById('line-status-container');
+            container.innerHTML = '';
+
+            locs.forEach(loc => {
+                // Cek apakah lokasi ini sudah ada di logs
+                const isScanned = logs.find(l => l.location_id === loc.id);
+                
+                let cardColor = isScanned ? 'bg-green-50 border-green-500' : 'bg-white border-red-500';
+                let iconClass = isScanned ? 'fa-circle-check text-green-500' : 'fa-circle-xmark text-red-500';
+                let statusText = isScanned ? `Done by ${isScanned.user_name}` : 'BELUM GENBA';
+                let timeText = isScanned ? new Date(isScanned.scan_time).toLocaleTimeString() : '-';
+
+                const html = `
+                <div class="status-card border-l-4 p-4 rounded-lg shadow-sm ${cardColor} flex items-center justify-between">
+                    <div>
+                        <h4 class="font-bold text-slate-800 text-sm">${loc.name}</h4>
+                        <p class="text-xs font-semibold mt-1 ${isScanned ? 'text-green-700' : 'text-red-600'}">${statusText}</p>
+                        <p class="text-xs text-slate-400 mt-1"><i class="fa-regular fa-clock"></i> ${timeText}</p>
+                    </div>
+                    <i class="fa-solid ${iconClass} text-3xl opacity-80"></i>
+                </div>
+                `;
+                container.innerHTML += html;
+            });
+
+            // 4. Update Tabel Log Bawah
+            const { data: recentLogs } = await supabase
+                .from('genba_logs')
+                .select('*, locations(name)')
+                .order('scan_time', { ascending: false })
+                .limit(10);
+            
+            const tbody = document.getElementById('all-logs-table');
+            tbody.innerHTML = '';
+            recentLogs.forEach(log => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b hover:bg-slate-50";
+                tr.innerHTML = `
+                    <td class="p-3 text-sm">${new Date(log.scan_time).toLocaleString()}</td>
+                    <td class="p-3 text-sm font-bold">${log.user_name}</td>
+                    <td class="p-3 text-sm">${log.locations.name}</td>
+                    <td class="p-3 text-sm"><span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">${log.shift}</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // --- MODE ADMIN (GENERATE QR) ---
+        async function initAdminMode() {
+            const { data: locs } = await supabase.from('locations').select('*').order('id');
+            const container = document.getElementById('admin-qr-container');
+            container.innerHTML = '';
+
+            locs.forEach(loc => {
+                const div = document.createElement('div');
+                div.className = "bg-white border border-slate-200 p-4 rounded-lg flex flex-col items-center text-center";
+                div.innerHTML = `
+                    <h4 class="font-bold text-sm mb-2">${loc.name}</h4>
+                    <div id="qr-${loc.id}" class="mb-3"></div>
+                    <p class="text-xs text-slate-400 mb-2 font-mono">${loc.code}</p>
+                    <button onclick="printQR('qr-${loc.id}', '${loc.name}')" class="bg-slate-800 text-white text-xs px-3 py-1 rounded hover:bg-black">
+                        <i class="fa-solid fa-print"></i> Print
+                    </button>
+                `;
+                container.appendChild(div);
+
+                // Generate QR visual
+                new QRCode(div.querySelector(`#qr-${loc.id}`), {
+                    text: loc.code,
+                    width: 100,
+                    height: 100
+                });
+            });
+        }
+
+        function printQR(elementId, title) {
+            const qrHtml = document.getElementById(elementId).innerHTML;
+            const win = window.open('', '', 'height=500,width=500');
+            win.document.write('<html><head><title>Print QR</title></head><body style="text-align:center; font-family:sans-serif;">');
+            win.document.write('<h1>' + title + '</h1>');
+            win.document.write(qrHtml);
+            win.document.write('<p>Tempel pada area Line</p>');
+            win.document.write('</body></html>');
+            win.document.close();
+            win.print();
+        }
+
+    </script>
+</body>
+</html>
