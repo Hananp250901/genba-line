@@ -281,18 +281,30 @@ async function loadChiefLogs() {
 }
 
 async function renderDashboard() {
-    const today = new Date().toISOString().split('T')[0]; // Ambil YYYY-MM-DD
+    const today = new Date().toISOString().split('T')[0];
     const shiftNow = getShift();
 
-    // 1. Ambil SEMUA log shift ini, URUTKAN DARI TERBARU (descending)
-    const { data: allLogs } = await db.from('genba_logs')
-        .select('*')
+    // 1. QUERY DENGAN JOIN (PENTING: Ambil nama dari tabel locations)
+    // Kita urutkan scan_time DESCENDING biar jam terbaru ada di paling atas
+    const { data: allLogs, error: logError } = await db.from('genba_logs')
+        .select(`
+            *,
+            locations ( name )
+        `) // <--- Ini kuncinya biar dapet nama lokasi, bukan ID
         .eq('shift', shiftNow) 
         .gte('scan_time', today)
-        .order('scan_time', { ascending: false }); // <--- WAJIB: Biar 21:15 di atas 20:00
+        .order('scan_time', { ascending: false });
 
-    // 2. Siapa yang terakhir scan di shift ini (Chief Aktif)
+    if (logError) console.error("Error ambil log:", logError);
+
+    // 2. Tentukan Siapa Chief yang lagi Aktif
     const activeUser = (allLogs && allLogs.length > 0) ? allLogs[0].user_name : null;
+
+    // Update Teks Info di Header Dashboard
+    const elShift = document.getElementById('monitor-shift');
+    if (elShift) {
+        elShift.innerHTML = `${shiftNow} <br> <span class="text-[10px] text-slate-500">ACTIVE: ${activeUser || 'BELUM ADA'}</span>`;
+    }
 
     const { data: locs } = await db.from('locations').select('*').order('id');
     const container = document.getElementById('line-status-container');
@@ -301,7 +313,8 @@ async function renderDashboard() {
     
     if(locs) {
         locs.forEach(loc => {
-            // Karena allLogs sudah di-sort TERBARU di atas, .find() otomatis ambil jam yang PALING BARU
+            // Cari data scan milik Active Chief di lokasi ini
+            // Karena sudah di-sort DESC, .find() otomatis ambil JAM TERBARU
             const log = allLogs ? allLogs.find(l => l.location_id === loc.id && l.user_name === activeUser) : null;
             const isDone = !!log;
             
@@ -309,10 +322,10 @@ async function renderDashboard() {
             <div class="bg-white border-l-4 ${isDone ? 'border-green-500' : 'border-red-500'} p-4 rounded-xl shadow-sm">
                 <div class="flex justify-between items-start">
                     <div>
-                        <h4 class="font-bold text-sm text-slate-800">${loc.name}</h4>
-                        <span class="text-[10px] font-bold ${isDone ? 'text-green-600' : 'text-slate-400'} uppercase">
-                            ${isDone ? 'VISITED' : 'BELUM'}
-                        </span>
+                        <h4 class="font-bold text-sm text-slate-800 uppercase">${loc.name}</h4>
+                        <p class="text-[10px] font-bold ${isDone ? 'text-green-600' : 'text-slate-400'}">
+                            ${isDone ? 'SUDAH DI-SCAN' : 'BELUM VISIT'}
+                        </p>
                     </div>
                     <div class="text-2xl">${isDone ? '✅' : '⏰'}</div>
                 </div>
@@ -322,27 +335,31 @@ async function renderDashboard() {
                         <p class="text-[11px] text-slate-700 font-bold">${log.user_name}</p>
                         <p class="text-[11px] text-blue-600 font-bold">Jam Terbaru: ${formatWaktu(log.scan_time)}</p>
                     ` : `
-                        <p class="text-[10px] text-red-500 font-bold">Menunggu Scan...</p>
+                        <p class="text-[10px] text-red-500 font-bold animate-pulse">Menunggu Scan...</p>
                     `}
                 </div>
             </div>`;
         });
     }
 
-    // 3. TABEL RIWAYAT (No Limit & Shift Kolom Sendiri)
+    // 3. TABEL RIWAYAT (Nampilin Nama Lokasi & Shift)
     const tbody = document.getElementById('all-logs-table');
     if(tbody) {
         tbody.innerHTML = '';
-        if (allLogs) allLogs.forEach(r => { 
-            tbody.innerHTML += `
-            <tr class="border-b border-slate-50 hover:bg-slate-50">
-                <td class="p-3 font-bold text-slate-700 text-xs">${formatWaktu(r.scan_time)}</td>
-                <td class="p-3 font-bold text-slate-800 text-xs">${r.user_name}</td>
-                <td class="p-3 text-slate-600 text-xs">Lokasi: ${r.location_id}</td>
-                <td class="p-3"> <span class="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded">${r.shift}</span>
-                </td>
-            </tr>`; 
-        });
+        if (allLogs) {
+            allLogs.forEach(r => { 
+                tbody.innerHTML += `
+                <tr class="border-b border-slate-50 hover:bg-slate-50">
+                    <td class="p-3 font-bold text-slate-700 text-xs">${formatWaktu(r.scan_time)}</td>
+                    <td class="p-3 font-bold text-slate-800 text-xs">${r.user_name}</td>
+                    <td class="p-3 text-slate-600 text-xs font-bold">
+                        ${r.locations ? r.locations.name : 'ID: ' + r.location_id} </td>
+                    <td class="p-3">
+                        <span class="bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-1 rounded">${r.shift}</span>
+                    </td>
+                </tr>`; 
+            });
+        }
     }
 }
 async function loadAdminQR() {
