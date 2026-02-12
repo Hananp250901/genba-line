@@ -78,7 +78,33 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5" id="line-status-container"></div>
                 <div class="mt-10 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                     <h3 class="font-bold text-lg mb-4">Log Terbaru</h3>
-                    <div class="overflow-x-auto"><table class="w-full text-left text-sm"><tbody id="all-logs-table"></tbody></table></div>
+                    <div class="overflow-x-auto">
+                    <div class="mt-10 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="font-bold text-lg">Log Genba (History)</h3>
+                            
+                            <div class="flex gap-2">
+                                <input type="date" id="filter-date" class="border border-slate-300 rounded px-3 py-1 text-sm focus:outline-blue-500">
+                                <button onclick="cariHistory()" class="bg-blue-600 text-white px-4 py-1 rounded text-sm font-bold hover:bg-blue-700">Cari</button>
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead class="bg-slate-50 text-slate-500 uppercase text-xs">
+                                    <tr>
+                                        <th class="p-3">Waktu</th>
+                                        <th class="p-3">Nama Chief</th>
+                                        <th class="p-3">Lokasi</th>
+                                        <th class="p-3">Shift</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="all-logs-table">
+                                    </tbody>
+                            </table>
+                        </div>
+                    </div>    
+                    <table class="w-full text-left text-sm"><tbody id="all-logs-table"></tbody></table></div>
                 </div>
             </section>
 

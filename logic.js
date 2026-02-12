@@ -230,7 +230,19 @@ function updateMenu(role) {
 // 7. LOAD DATA (JAM NETRAL)
 // ==========================================
 async function initChiefMode() { loadChiefLogs(); }
-async function initDeptHeadMode() { renderDashboard(); dashboardInterval = setInterval(renderDashboard, 10000); }
+async function initDeptHeadMode() { 
+    // Set input tanggal ke hari ini (YYYY-MM-DD)
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }); // Format: 2026-02-12
+    const dateInput = document.getElementById('filter-date');
+    if(dateInput) {
+        dateInput.value = today;
+        // Langsung panggil fungsi cari biar tabel keisi otomatis
+        cariHistory(); 
+    }
+    
+    renderDashboard(); 
+    dashboardInterval = setInterval(renderDashboard, 10000); 
+}
 async function initAdminMode() { loadAdminQR(); }
 
 async function loadChiefLogs() {
@@ -345,5 +357,57 @@ async function loadAdminQR() {
             };
             container.appendChild(div);
         });
+    }
+}
+// ==========================================
+// 8. FITUR HISTORY DEPT HEAD
+// ==========================================
+async function cariHistory() {
+    const inputDate = document.getElementById('filter-date').value;
+    if (!inputDate) return Swal.fire('Pilih Tanggal Dulu', '', 'warning');
+
+    const tbody = document.getElementById('all-logs-table');
+    tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center">Loading data...</td></tr>';
+
+    // TRIK JAM: Supaya pas 24 Jam Waktu Indonesia Barat (WIB)
+    // Kita set range dari jam 00:00:00 WIB s/d 23:59:59 WIB
+    // Kode +07:00 memastikan browser mengubahnya ke UTC yang sesuai untuk Supabase
+    const start = new Date(`${inputDate}T00:00:00+07:00`).toISOString();
+    const end = new Date(`${inputDate}T23:59:59+07:00`).toISOString();
+
+    const { data, error } = await db.from('genba_logs')
+        .select('*, locations(name)')
+        .gte('scan_time', start) // Lebih besar dari jam 00:00 WIB
+        .lte('scan_time', end)   // Lebih kecil dari jam 23:59 WIB
+        .order('scan_time', { ascending: true }); // Urut dari pagi ke malam
+
+    tbody.innerHTML = '';
+
+    if (error) {
+        console.error(error);
+        return Swal.fire('Error', 'Gagal ambil data', 'error');
+    }
+
+    if (data && data.length > 0) {
+        data.forEach(r => {
+            // Kita pakai formatWaktu() yang tadi sudah kita benerin (Paksa WIB)
+            const html = `
+            <tr class="border-b border-slate-100 hover:bg-slate-50">
+                <td class="p-3 text-slate-500 text-xs">
+                    <span class="font-bold text-slate-700 text-sm">${formatWaktu(r.scan_time)}</span><br>
+                    ${formatTanggal(r.scan_time)}
+                </td>
+                <td class="p-3 font-bold text-slate-700">${r.user_name}</td>
+                <td class="p-3 text-slate-600">${r.locations.name}</td>
+                <td class="p-3">
+                    <span class="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-1 rounded border border-blue-200">
+                        ${r.shift}
+                    </span>
+                </td>
+            </tr>`;
+            tbody.innerHTML += html;
+        });
+    } else {
+        tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-400">Tidak ada riwayat scan pada tanggal ini.</td></tr>';
     }
 }
