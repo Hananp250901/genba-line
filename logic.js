@@ -38,8 +38,8 @@ function formatTanggal(isoString) {
 function getShift() {
     // Ambil jam dari HP Chief saat ini
     const h = new Date().getHours();
-    if (h >= 7 && h < 15) return 'SHIFT 1';
-    if (h >= 15 && h < 23) return 'SHIFT 2';
+    if (h >= 8 && h < 16) return 'SHIFT 1';
+    if (h >= 16 && h < 24) return 'SHIFT 2';
     return 'SHIFT 3';
 }
 
