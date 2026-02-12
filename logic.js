@@ -92,40 +92,62 @@ async function checkUrlScan() {
 }
 
 async function processScan(code) {
-    if (locations.length === 0) {
-        const { data } = await db.from('locations').select('*');
-        if (data) locations = data;
+    if (!navigator.geolocation) {
+        return Swal.fire('Error', 'Browser/HP kamu tidak mendukung GPS', 'error');
     }
-    const loc = locations.find(l => l.code === code);
 
-    if (loc) {
-        Swal.fire({ title: 'Menyimpan...', text: loc.name, didOpen: () => Swal.showLoading() });
-        
-        // PENTING: Biarkan Supabase mencatat waktu servernya sendiri
-        // Kita tidak kirim 'scan_time' dari sini agar konsisten
+    Swal.fire({ 
+        title: 'Verifikasi Lokasi...', 
+        text: 'Memastikan kamu benar-benar di Chemco...', 
+        didOpen: () => Swal.showLoading() 
+    });
+
+    navigator.geolocation.getCurrentPosition(async (position) => {
+        const userLat = position.coords.latitude;
+        const userLon = position.coords.longitude;
+
+        // KOORDINAT PT CHEMCO CIKARANG (Jababeka Blok F)
+        const targetLat = -6.2878; 
+        const targetLon = 107.1288;
+        const radiusAman = 0.2; // Toleransi 200 meter (karena pabrik luas)
+
+        const jarak = calculateDistance(userLat, userLon, targetLat, targetLon);
+
+        if (jarak > radiusAman) {
+            Swal.fire({
+                icon: 'error',
+                title: 'SCAN DITOLAK!',
+                text: 'Kamu terdeteksi di luar area Chemco. Jangan coba-coba scan dari rumah ya!',
+                footer: `Jarak kamu: ${(jarak * 1000).toFixed(0)} meter dari titik pusat.`
+            });
+            return;
+        }
+
+        // Jika OK, baru simpan ke Database
+        const loc = locations.find(l => l.code === code);
         const { error } = await db.from('genba_logs').insert([{
             user_name: currentUser.full_name,
             location_id: loc.id,
             shift: getShift(),
-            scan_time: new Date().toISOString() // <--- INI TAMBAHANNYA
+            scan_time: new Date().toISOString()
         }]);
 
         if (!error) {
-            // Tampilkan jam HP saat ini untuk konfirmasi visual
-            const jamSekarang = new Date().toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
-            
-            await Swal.fire({ 
-                icon: 'success', title: 'BERHASIL', 
-                text: `${loc.name} - ${jamSekarang}`, 
-                timer: 2000, showConfirmButton: false 
-            });
+            Swal.fire('Berhasil', `Genba di ${loc.name} Tercatat!`, 'success');
             loadChiefLogs();
-        } else {
-            Swal.fire('Error', 'Gagal simpan data', 'error');
         }
-    } else {
-        Swal.fire('Gagal', 'QR Code Salah', 'error');
-    }
+    }, (err) => {
+        Swal.fire('GPS Mati', 'Aktifkan GPS HP kamu dan izinkan browser akses lokasi!', 'error');
+    });
+}
+
+// Rumus Jarak (Haversine)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; 
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
 // ==========================================
@@ -291,16 +313,14 @@ async function renderDashboard() {
     const today = new Date().toISOString().split('T')[0];
     const shiftNow = getShift();
 
-    // 1. Ambil data dengan Join Locations & Jam Terbaru (Descending)
+    // Ambil data terbaru dengan JOIN ke tabel locations
     const { data: allLogs } = await db.from('genba_logs')
         .select('*, locations(name)')
         .eq('shift', shiftNow) 
         .gte('scan_time', today)
-        .order('scan_time', { ascending: false });
+        .order('scan_time', { ascending: false }); // Biar 21:15 ada di paling atas
 
-    // 2. Tentukan Active Chief
     const activeUser = (allLogs && allLogs.length > 0) ? allLogs[0].user_name : null;
-
     const { data: locs } = await db.from('locations').select('*').order('id');
     const container = document.getElementById('line-status-container');
     if(!container) return;
@@ -308,52 +328,31 @@ async function renderDashboard() {
     
     if(locs) {
         locs.forEach(loc => {
+            // Ambil scanan terbaru milik Active Chief di lokasi ini
             const log = allLogs ? allLogs.find(l => l.location_id === loc.id && l.user_name === activeUser) : null;
             const isDone = !!log;
             
-            // Logic Animasi: Kalau sudah di-scan, kasih kelas animate-glow-success
-            const glowClass = isDone ? 'animate-glow-success border-green-500' : 'border-red-500';
-
             container.innerHTML += `
-            <div class="bg-white border-l-4 ${glowClass} p-5 rounded-2xl shadow-sm card-entry relative overflow-hidden transition-all duration-500">
-                ${isDone ? '<div class="absolute -right-2 -top-2 w-12 h-12 bg-green-500/10 rounded-full blur-xl"></div>' : ''}
-                
-                <div class="flex justify-between items-start relative z-10">
-                    <div>
-                        <h4 class="font-bold text-slate-800 text-sm tracking-tight">${loc.name}</h4>
-                        <div class="flex items-center gap-1 mt-1">
-                            <span class="w-2 h-2 rounded-full ${isDone ? 'bg-green-500' : 'bg-red-400 animate-pulse'}"></span>
-                            <span class="text-[10px] font-bold uppercase ${isDone ? 'text-green-600' : 'text-slate-400'}">
-                                ${isDone ? 'Visited' : 'Waiting'}
-                            </span>
-                        </div>
+            <div class="bg-white border-l-4 ${isDone ? 'border-green-500 animate-glow-success' : 'border-red-500'} p-4 rounded-xl shadow-sm relative transition-all">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="max-w-[80%]">
+                        <h4 class="font-bold text-sm text-slate-800 uppercase truncate">${loc.name}</h4>
+                        <span class="text-[10px] font-black ${isDone ? 'text-green-600' : 'text-slate-400'}">
+                            ${isDone ? 'VISITED' : 'PENDING'}
+                        </span>
                     </div>
-                    <div class="text-2xl drop-shadow-sm">
-                        ${isDone ? '✅' : '⏰'}
-                    </div>
+                    <div class="text-xl">${isDone ? '✅' : '⏰'}</div>
                 </div>
-                
-                <div class="mt-4 pt-3 border-t border-slate-100 relative z-10">
+                <div class="mt-2 pt-2 border-t border-slate-50 text-[11px]">
                     ${isDone ? `
-                        <p class="text-[11px] text-slate-500 mb-1">Last Scan by:</p>
-                        <div class="flex justify-between items-center">
-                            <span class="font-bold text-slate-700 text-xs">${log.user_name}</span>
-                            <span class="text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
-                                ${formatWaktu(log.scan_time)}
-                            </span>
-                        </div>
-                    ` : `
-                        <p class="text-[10px] text-red-500 font-bold italic">Line belum di genba...</p>
-                    `}
+                        <p class="font-bold text-slate-700">${log.user_name}</p>
+                        <p class="text-blue-600 font-black">Jam: ${formatWaktu(log.scan_time)}</p>
+                    ` : '<p class="text-red-400 italic">Menunggu kunjungan...</p>'}
                 </div>
             </div>`;
         });
     }
-
-    // Update Tabel bawah juga biar konsisten
-    renderHistoryTable(allLogs);
 }
-
 // Fungsi bantu biar rapi
 function renderHistoryTable(data) {
     const tbody = document.getElementById('all-logs-table');
