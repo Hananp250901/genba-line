@@ -109,7 +109,7 @@ async function processScan(code) {
         // KOORDINAT PT CHEMCO CIKARANG (Jababeka Blok F)
         const targetLat = -6.2878; 
         const targetLon = 107.1288;
-        const radiusAman = 0.2; // Toleransi 200 meter (karena pabrik luas)
+        const radiusAman = 0.9; // Toleransi 200 meter (karena pabrik luas)
 
         const jarak = calculateDistance(userLat, userLon, targetLat, targetLon);
 
